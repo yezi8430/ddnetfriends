@@ -321,10 +321,10 @@ const colorBodyArray = nickname1.map(item => item.color_body);
   const htmlContent =`<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF8">
+<meta charset="UTF-8">
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: "Segoe UI Emoji", "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Symbol", "Android Emoji", sans-serif;
             background-color: #2c2c2c;
             padding: 0px;
             width:300px;
