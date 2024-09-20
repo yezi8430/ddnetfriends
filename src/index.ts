@@ -255,6 +255,7 @@ async function deletefriend(ctx: Context, userid,friendname) {
 }
 
 async function getimage(nickname1,warband){
+  //console.log(nickname1)
   let canvas = [];
   Object.keys(nickname1).forEach(index => {
     canvas.push(`'canvas${parseInt(index)}'`); // 将字符串转换为整数并加 1
@@ -276,10 +277,16 @@ async function getimage(nickname1,warband){
       {
         nickname1[key].warband =''
       }
-      
+      if (nickname1[key].afk =='true'){
+        nickname1[key].afk='afk';
+      }
+      else{
+        nickname1[key].afk='';
+      }
+
 
         div += `<div class="user-list">
-                        <div class="user-item">
+                        <div class="user-item ${nickname1[key].afk}">
                             <canvas class="my-canvas" style="width: 96px; height: 64px" id=canvas`+[key]+`></canvas>
                             <div class="user-info">
                                 <p class="user-name">${nickname1[key].friendname}${nickname1[key].warband}</p>
@@ -309,7 +316,7 @@ async function getimage(nickname1,warband){
         .user-item {
             display: flex;
             align-items: center;
-            background-color: #517a4a;
+            background-color: #4c8c4f;
             margin-bottom: 5px;
             padding: 10px;
             border-radius: 5px;
@@ -329,9 +336,12 @@ async function getimage(nickname1,warband){
             margin: 0;
         }
         .user-details {
-            color: #a3b18a;
+            color: #d4d4d4;
             font-size: 0.8em;
             margin: 0;
+        }
+        .afk{
+        background-color: #998500;
         }
     </style>
 </head>
@@ -439,7 +449,7 @@ function updateserverinfo(htmldata)
           }
   
           return item.info.clients.map(client => 
-            `friendname:${client.name || 'null'},skinname:${client.skin?.name || 'null'},servername:${servername},mapname:${mapname},color_body:${client.skin?.color_body || 'null'},color_feet:${client.skin?.color_feet || 'null'},warband:${client.clan}`
+            `friendname:${client.name || 'null'},skinname:${client.skin?.name || 'null'},servername:${servername},mapname:${mapname},color_body:${client.skin?.color_body || 'null'},color_feet:${client.skin?.color_feet || 'null'},warband:${client.clan},afk:${client.afk}`
           );
         });
         //console.log(flattenedData)
@@ -470,7 +480,8 @@ function checkAndPrintFriendsnew(newclientInfoArray, backlist) {
         mapname: parts[3].split(':')[1],
         color_body: parts[4].split(':')[1],
         color_feet: parts[5].split(':')[1],
-        warband:parts[6].split(':')[1]
+        warband:parts[6].split(':')[1],
+        afk:parts[7].split(':')[1]
       };
     })
     .filter(Boolean); // 过滤掉 null 值
@@ -524,7 +535,8 @@ export async function apply(ctx: Context,Config) {
       } else {
         let newclientInfoArray = updateserverinfo(htmldata);
         let allfriends = checkAndPrintFriendsnew(newclientInfoArray, backlist);
-
+        //console.log(allfriends)
+        //console.log(newclientInfoArray)
         if (allfriends.length === 0) {
           session.send('无在线好友');
           return;
@@ -566,7 +578,7 @@ export async function apply(ctx: Context,Config) {
               x: 0,        // 起始点 x 坐标
               y: 0,        // 起始点 y 坐标
               width: 315,  // 截图宽度
-              height: bodyHeight + 10  // 截图高度
+              height: bodyHeight + 15  // 截图高度
             };
 
             const image = await page.screenshot({ clip });
