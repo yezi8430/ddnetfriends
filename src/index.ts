@@ -119,6 +119,7 @@ async function deleteplayer(ctx: Context, { session }) {
 async function getpoints(ctx: Context,{ session },target) {
   const pointsurl='https://ddnet.org/players/?json2=';
   let playernamelist;
+ try{
   if (target !==null){
     playernamelist =[{playername:target}];
   }
@@ -204,6 +205,10 @@ async function getpoints(ctx: Context,{ session },target) {
       ctx.logger('获取数据时发生错误');
     }
   }
+ }catch(error){
+  session.send('网络似乎开了会儿小差'+error)
+  return;
+ }
 }
 
 
