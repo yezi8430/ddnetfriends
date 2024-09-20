@@ -255,7 +255,8 @@ async function deletefriend(ctx: Context, userid,friendname) {
 }
 
 async function getimage(nickname1,warband){
-  //console.log(nickname1)
+  
+
   let canvas = [];
   Object.keys(nickname1).forEach(index => {
     canvas.push(`'canvas${parseInt(index)}'`); // 将字符串转换为整数并加 1
@@ -270,7 +271,8 @@ async function getimage(nickname1,warband){
       if (warband === true) {
         
         if (nickname1[key].warband && nickname1[key].warband !== 'null') {
-          nickname1[key].warband = ' - 战队:' + nickname1[key].warband;
+          nickname1[key].warband = ' - [' + nickname1[key].warband+']';
+          
         }
       }
       else
@@ -284,7 +286,7 @@ async function getimage(nickname1,warband){
         nickname1[key].afk='';
       }
 
-
+      
         div += `<div class="user-list">
                         <div class="user-item ${nickname1[key].afk}">
                             <canvas class="my-canvas" style="width: 96px; height: 64px" id=canvas`+[key]+`></canvas>
@@ -296,11 +298,15 @@ async function getimage(nickname1,warband){
                         </div>
                   </div>`;
     }
+
 }
 
+const colorBodyArray = nickname1.map(item => item.color_body);
+//console.log(colorBodyArray)
   const htmlContent =`<!DOCTYPE html>
 <html lang="en">
 <head>
+<meta charset="UTF8">
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -359,7 +365,7 @@ window.onload = function() {
     const images = [
         `+imageurl+`
     ];
-
+    
     // 创建一个加载图像的 Promise 数组
     const imagePromises = images.map((src, index) => loadImage(src, index));
 
@@ -400,31 +406,46 @@ window.onload = function() {
     }
 
     // 绘制图像的函数
-    function drawImages(ctx, img, s) {
-        ctx.drawImage(img, 192 * s, 64 * s, 64 * s, 32 * s, 8 * s, 32 * s, 64 * s, 30 * s); // back feet shadow
-        ctx.drawImage(img, 96 * s, 0 * s, 96 * s, 96 * s, 16 * s, 0 * s, 64 * s, 64 * s); // body shadow
-        ctx.drawImage(img, 192 * s, 64 * s, 64 * s, 32 * s, 24 * s, 32 * s, 64 * s, 30 * s); // front feet shadow
-        ctx.drawImage(img, 192 * s, 32 * s, 64 * s, 32 * s, 8 * s, 32 * s, 64 * s, 30 * s); // back feet
-        ctx.drawImage(img, 0 * s, 0 * s, 96 * s, 96 * s, 16 * s, 0 * s, 64 * s, 64 * s); // body
-        ctx.drawImage(img, 192 * s, 32 * s, 64 * s, 32 * s, 24 * s, 32 * s, 64 * s, 30 * s); // front feet
-        ctx.drawImage(img, 64 * s, 96 * s, 32 * s, 32 * s, 39 * s, 18 * s, 26 * s, 26 * s); // left eye
+function drawImages(ctx, img, s) {
 
-        // right eye (flip and draw)
-        ctx.save();
-        ctx.scale(-1, 1);
-        ctx.drawImage(img, 64 * s, 96 * s, 32 * s, 32 * s, -73 * s, 18 * s, 26 * s, 26 * s);
-        ctx.restore();
-    }
+
+
+    // 开始渲染
+    ctx.drawImage(img, 192 * s, 64 * s, 64 * s, 32 * s, 8 * s, 32 * s, 64 * s, 30 * s); // back feet shadow
+    ctx.drawImage(img, 96 * s, 0 * s, 96 * s, 96 * s, 16 * s, 0 * s, 64 * s, 64 * s); // body shadow
+    ctx.drawImage(img, 192 * s, 64 * s, 64 * s, 32 * s, 24 * s, 32 * s, 64 * s, 30 * s); // front feet shadow
+    ctx.drawImage(img, 192 * s, 32 * s, 64 * s, 32 * s, 8 * s, 32 * s, 64 * s, 30 * s); // back feet
+    ctx.drawImage(img, 0 * s, 0 * s, 96 * s, 96 * s, 16 * s, 0 * s, 64 * s, 64 * s); // body
+    ctx.drawImage(img, 192 * s, 32 * s, 64 * s, 32 * s, 24 * s, 32 * s, 64 * s, 30 * s); // front feet
+    ctx.drawImage(img, 64 * s, 96 * s, 32 * s, 32 * s, 39 * s, 18 * s, 26 * s, 26 * s); // left eye
+
+    // right eye (flip and draw)
+    ctx.save();
+    ctx.scale(-1, 1);
+    ctx.drawImage(img, 64 * s, 96 * s, 32 * s, 32 * s, -73 * s, 18 * s, 26 * s, 26 * s);
+    ctx.restore();
+    
+
+
+
+}
 
     // 获取所有 .user-item 元素
     const userLists = document.querySelectorAll('.user-item');
     // 计算 body 的高度
     const bodyHeight = userLists.length * 89; // 每个 .user-item 高度为 89px
+
+    
 };
+
+
 
 </script>
 </body>
 </html>`
+
+
+
 
 return htmlContent;
 }
