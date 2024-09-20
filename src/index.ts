@@ -224,14 +224,29 @@ async function extractNames(input) {
   
   // 将数组转换为逗号分隔的字符串
   return names.join(',');
+  
 }
 
 //添加好友
-async function addlist(ctx: Context, arrfriends) {  
-  for (let friend of arrfriends) {  
-    const backlist=await ctx.database.create("ddnetfriendsdata", { userid: friend.userid, friendname: friend.friendname});
+async function addlist(ctx: Context, arrfriends) {
+  for (let friend of arrfriends) {
+    // 首先检查数据库中是否已存在相同的 userid 和 friendname
+    const existingRecord = await ctx.database.get('ddnetfriendsdata', {
+      userid: friend.userid,
+      friendname: friend.friendname
+    });
+
+    // 如果不存在相同记录，则创建新记录
+    if (!existingRecord || existingRecord.length === 0) {
+      await ctx.database.create('ddnetfriendsdata', {
+        userid: friend.userid,
+        friendname: friend.friendname
+      });
+    }
+    // 如果存在相同记录，则跳过（不做任何操作）
   }
 }
+
 
 var backlist
 //获取列表

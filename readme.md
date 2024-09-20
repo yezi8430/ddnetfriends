@@ -19,6 +19,8 @@ add_friend "111" "战队1" add_friend "123" "" add_friend "name1" "战队1" add_
 
 更新日志
 
+v0.3.7：优化添加好友时重复添加数据的问题
+
 v0.3.6：优化EMOJI不显示的问题
 
 v0.3.5:新增一个afk指示器
