@@ -5,11 +5,18 @@ import { } from 'koishi-plugin-puppeteer'
 import { config } from 'process';
 import type { Page } from 'puppeteer-core'
 import { arrayBuffer } from 'stream/consumers';
+import path from 'path'
+import fs from 'fs';
+//const fontPath = path.resolve(__dirname, './font/seguiemj.TTF');
+const fontPath = require.resolve('../font/seguiemj.ttf');
+const fontBase64 = fs.readFileSync(fontPath, {encoding: 'base64'});
+
 export const inject = {required:["database"],optional: ['puppeteer']}
 export const name = 'ddnetfriends';
 export const Config: Schema<Config> = Schema.object({
   useimage: Schema.boolean().description('是否使用图片样式').default(true),
-  enablewarband: Schema.boolean().description('是否显示战队(返回的数据以官网为准,如果好友不是该战队,可能是别人恰分改的ID？)').default(true)
+  enablewarband: Schema.boolean().description('是否显示战队(返回的数据以官网为准,如果好友不是该战队,可能是别人恰分改的ID？)').default(true),
+  enableemoji: Schema.boolean().description('是否开启emoji,改善有些id或战队使用emoji表情的显示情况,但是有可能会影响加载速度(maybe)').default(false)
 });
 
 
@@ -269,9 +276,16 @@ async function deletefriend(ctx: Context, userid,friendname) {
   }
 }
 
-async function getimage(nickname1,warband){
+async function getimage(nickname1,warband,emoji){
   
-
+  let emojistring;
+  if (emoji ==true){
+    emojistring='font-family: \'Font\', seguiemj;'
+  }
+  else
+  {
+    emojistring='';
+  }
   let canvas = [];
   Object.keys(nickname1).forEach(index => {
     canvas.push(`'canvas${parseInt(index)}'`); // 将字符串转换为整数并加 1
@@ -306,7 +320,7 @@ async function getimage(nickname1,warband){
                         <div class="user-item ${nickname1[key].afk}">
                             <canvas class="my-canvas" style="width: 96px; height: 64px" id=canvas`+[key]+`></canvas>
                             <div class="user-info">
-                                <p class="user-name">${nickname1[key].friendname}${nickname1[key].warband}</p>
+                                <p class="user-name">${nickname1[key].friendname}<span class="warband">${nickname1[key].warband}</span></p>
                                 <p class="user-details">服务器:${nickname1[key].servername}</p>
                                 <p class="user-details">地图名:${nickname1[key].mapname}</p>
                             </div>
@@ -317,7 +331,7 @@ async function getimage(nickname1,warband){
 }
 
 const colorBodyArray = nickname1.map(item => item.color_body);
-//console.log(colorBodyArray)
+
   const htmlContent =`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -325,14 +339,14 @@ const colorBodyArray = nickname1.map(item => item.color_body);
     <style>
         @font-face {
         font-family: 'Font';
-        src: url('font/NotoColorEmoji-Regular.ttf') format('truetype');
+        src: url(data:font/truetype;charset=utf-8;base64,${fontBase64}) format('truetype');
         font-weight: normal;
         font-style: normal;
       }
 
 
         body {
-            font-family: 'Font', NotoColorEmoji-Regular;
+            ${emojistring}
             background-color: #2c2c2c;
             padding: 0px;
             width:300px;
@@ -589,6 +603,7 @@ export async function apply(ctx: Context,Config) {
           let context;
           let browser;
           let warband;
+          let emoji;
           try {
             // 使用图片处理好友列表
             const nickname1 = allfriends; // 在线好友名字
@@ -597,8 +612,13 @@ export async function apply(ctx: Context,Config) {
             }else{
               warband=false;
             }
-            const gethtml = await getimage(nickname1,warband)// 从函数中获取html}
-            //console.log(nickname1)
+            if (Config?.enableemoji === true) {
+              emoji=true;
+              }else{
+                emoji=false;
+              }
+            const gethtml = await getimage(nickname1,warband,emoji)// 从函数中获取html}
+
             browser = ctx.puppeteer.browser;
             context = await browser.createBrowserContext();
             page = await context.newPage();
