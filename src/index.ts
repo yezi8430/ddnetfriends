@@ -323,8 +323,16 @@ const colorBodyArray = nickname1.map(item => item.color_body);
 <head>
 <meta charset="UTF-8">
     <style>
+        @font-face {
+        font-family: 'Font';
+        src: url('font/NotoColorEmoji-Regular.ttf') format('truetype');
+        font-weight: normal;
+        font-style: normal;
+      }
+
+
         body {
-            font-family: "Segoe UI Emoji", "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Symbol", "Android Emoji", sans-serif;
+            font-family: 'Font', NotoColorEmoji-Regular;
             background-color: #2c2c2c;
             padding: 0px;
             width:300px;
