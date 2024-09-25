@@ -16,7 +16,8 @@ export const name = 'ddnetfriends';
 export const Config: Schema<Config> = Schema.object({
   useimage: Schema.boolean().description('是否使用图片样式').default(true),
   enablewarband: Schema.boolean().description('是否显示战队(返回的数据以官网为准,如果好友不是该战队,可能是别人恰分改的ID？)').default(true),
-  enableemoji: Schema.boolean().description('是否开启emoji,改善有些id或战队使用emoji表情的显示情况,但是有可能会影响加载速度(maybe)').default(false)
+  enableemoji: Schema.boolean().description('是否开启emoji,改善有些id或战队使用emoji表情的显示情况,但是有可能会影响加载速度(maybe)').default(false),
+  colorbodyconfig:Schema.boolean().description('启用皮肤颜色,不过相比游戏内会显得更亮一点,自己看着要不要开关吧').default(false)
 });
 
 
@@ -276,8 +277,71 @@ async function deletefriend(ctx: Context, userid,friendname) {
   }
 }
 
-async function getimage(nickname1,warband,emoji){
+async function getimage(nickname1,warband,emoji,colorbodyconfig){
+  let newcolorbody;
+  let colorbody;
+  if (colorbodyconfig ==true){
+
+    const processColorBody = (colorBody) => {
+      if (colorBody === 'null') {
+          return null;
+      }
   
+      // 将颜色转换为16进制并补足为6位
+      let hex = parseInt(colorBody).toString(16).padStart(6, '0');
+  
+      // 分组并转换为10进制，然后乘以1.411
+      let h = Math.round(parseInt(hex.slice(0, 2), 16) * 1.411);
+      let s = Math.round(parseInt(hex.slice(2, 4), 16) * 0.392);
+      let l = Math.round(parseInt(hex.slice(4, 6), 16) * 0.392);
+  
+      // 如果亮度小于107，则进行处理
+      if (l < 107) {
+          l = Math.floor(l / 2) + 128;
+      }
+      l = l * 0.392;
+  
+  
+      // 将HSL转换为RGB
+      const hslToRgb = (h, s, l) => {
+          s /= 100;
+          l /= 100;
+          const a = s * Math.min(l, 1 - l);
+          const f = (n) => {
+              const k = (n + h / 30) % 12;
+              return l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+          };
+          return [
+              Math.round(255 * f(0)),
+              Math.round(255 * f(8)),
+              Math.round(255 * f(4))
+          ];
+      };
+  
+      const [r, g, b] = hslToRgb(h, s, l);
+  
+      return { r, g, b };
+  };
+  
+  colorbody = nickname1.map(friend => {
+      const color = processColorBody(friend.color_body);
+      if (color === null) {
+          return 'null';
+      }
+      return `${color.r},${color.g},${color.b}`;
+  });
+  
+
+  newcolorbody=JSON.stringify(colorbody);
+  }
+  else{
+    let groupCount = Object.keys(nickname1).length;
+    newcolorbody = Array(groupCount).fill("null");
+    newcolorbody=JSON.stringify(newcolorbody);
+  }
+  
+  console.log(newcolorbody)
+//获取颜色end
   let emojistring;
   if (emoji ==true){
     emojistring='font-family: \'Font\', seguiemj;'
@@ -391,92 +455,116 @@ const colorBodyArray = nickname1.map(item => item.color_body);
 <body>`+div+`
 
 <script>
-
-
 window.onload = function() {
-    const canvasIds = [`+canvasnew+`];
-    const canvases = canvasIds.map(id => document.getElementById(id));
-    const contexts = canvases.map(canvas => canvas.getContext('2d'));
+    var canvasIds = [`+canvasnew+`];
+    var canvases = canvasIds.map(function(id) { return document.getElementById(id); });
+    var contexts = canvases.map(function(canvas) { return canvas.getContext('2d'); });
 
     // 图像源
-    const images = [
-        `+imageurl+`
+    var images = [
+`+imageurl+`
     ];
     
+    var colorbody = ${newcolorbody};
+
     // 创建一个加载图像的 Promise 数组
-    const imagePromises = images.map((src, index) => loadImage(src, index));
+    var imagePromises = images.map(function(src, index) { return loadImage(src, index); });
 
     // 使用 Promise.all 等待所有图像加载完成
     Promise.all(imagePromises)
-        .then(() => {
+        .then(function() {
             console.log('All images loaded successfully');
         })
-        .catch(error => {
+        .catch(function(error) {
             console.error('Error loading images:', error);
         });
 
-    function loadImage(src, index) {
-        return new Promise((resolve, reject) => {
-            const img = new Image();
-            img.onerror = function() {
-                // 如果主要链接加载失败，尝试使用备用链接
-                if (img.src !== 'https://ddnet.org/skins/skin/default.png') {
-                    console.log('Image load failed. Trying backup URL.');
-                    img.src = 'https://ddnet.org/skins/skin/default.png';
-                } else {
-                    reject('Both primary and backup image URLs failed to load.');
-                }
-            };
+function loadImage(src, index) {
+    return new Promise(function(resolve, reject) {
+        var img = new Image();
+        img.crossOrigin = "Anonymous";  // 设置在 src 之前
+        img.onerror = function() {
+            // 如果主要链接加载失败，尝试使用备用链接
+            if (img.src !== 'https://ddnet.org/skins/skin/default.png') {
+                console.log('Image load failed. Trying backup URL.');
+                img.src = 'https://ddnet.org/skins/skin/default.png';
+            } else {
+                reject('Both primary and backup image URLs failed to load.');
+            }
+        };
             img.onload = function() {
-                const s = 1;
+                var s = 1;
 
                 // 为每个画布绘制相应的图像
-                const canvas = canvases[index];
-                const context = contexts[index];
+                var canvas = canvases[index];
+                var context = contexts[index];
                 canvas.width = 96 * s;
                 canvas.height = 64 * s;
-                drawImages(context, img, s);
+
+                // 处理图像颜色
+                var processedImg = processImageColor(img, colorbody[index]);
+                
+                drawImages(context, processedImg, s);
                 resolve();
             };
             img.src = src;
         });
     }
 
-    // 绘制图像的函数
-function drawImages(ctx, img, s) {
+    // 处理图像颜色的函数
+function processImageColor(img, color) {
+    var canvas = document.createElement('canvas');
+    var ctx = canvas.getContext('2d');
+    canvas.width = img.width;
+    canvas.height = img.height;
 
+    // 绘制原始图像
+    ctx.drawImage(img, 0, 0);
 
+    // 如果颜色不是 'null'，进行处理
+    if (color !== 'null') {
+        var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        var data = imageData.data;
+        var rgb = color.split(',').map(Number);
 
-    // 开始渲染
-    ctx.drawImage(img, 192 * s, 64 * s, 64 * s, 32 * s, 8 * s, 32 * s, 64 * s, 30 * s); // back feet shadow
-    ctx.drawImage(img, 96 * s, 0 * s, 96 * s, 96 * s, 16 * s, 0 * s, 64 * s, 64 * s); // body shadow
-    ctx.drawImage(img, 192 * s, 64 * s, 64 * s, 32 * s, 24 * s, 32 * s, 64 * s, 30 * s); // front feet shadow
-    ctx.drawImage(img, 192 * s, 32 * s, 64 * s, 32 * s, 8 * s, 32 * s, 64 * s, 30 * s); // back feet
-    ctx.drawImage(img, 0 * s, 0 * s, 96 * s, 96 * s, 16 * s, 0 * s, 64 * s, 64 * s); // body
-    ctx.drawImage(img, 192 * s, 32 * s, 64 * s, 32 * s, 24 * s, 32 * s, 64 * s, 30 * s); // front feet
-    ctx.drawImage(img, 64 * s, 96 * s, 32 * s, 32 * s, 39 * s, 18 * s, 26 * s, 26 * s); // left eye
+        for (var i = 0; i < data.length; i += 4) {
+            var avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+            // 使用原始亮度调整新颜色
+            data[i] = Math.min(255, (rgb[0] * avg) / 128);
+            data[i + 1] = Math.min(255, (rgb[1] * avg) / 128);
+            data[i + 2] = Math.min(255, (rgb[2] * avg) / 128);
+            // 保持原始的 alpha 值
+        }
 
-    // right eye (flip and draw)
-    ctx.save();
-    ctx.scale(-1, 1);
-    ctx.drawImage(img, 64 * s, 96 * s, 32 * s, 32 * s, -73 * s, 18 * s, 26 * s, 26 * s);
-    ctx.restore();
-    
+        ctx.putImageData(imageData, 0, 0);
+    }
 
-
-
+    return canvas;
 }
 
+    // 绘制图像的函数
+    function drawImages(ctx, img, s) {
+        // 开始渲染
+        ctx.drawImage(img, 192 * s, 64 * s, 64 * s, 32 * s, 8 * s, 32 * s, 64 * s, 30 * s); // back feet shadow
+        ctx.drawImage(img, 96 * s, 0 * s, 96 * s, 96 * s, 16 * s, 0 * s, 64 * s, 64 * s); // body shadow
+        ctx.drawImage(img, 192 * s, 64 * s, 64 * s, 32 * s, 24 * s, 32 * s, 64 * s, 30 * s); // front feet shadow
+        ctx.drawImage(img, 192 * s, 32 * s, 64 * s, 32 * s, 8 * s, 32 * s, 64 * s, 30 * s); // back feet
+        ctx.drawImage(img, 0 * s, 0 * s, 96 * s, 96 * s, 16 * s, 0 * s, 64 * s, 64 * s); // body
+        ctx.drawImage(img, 192 * s, 32 * s, 64 * s, 32 * s, 24 * s, 32 * s, 64 * s, 30 * s); // front feet
+        ctx.drawImage(img, 64 * s, 96 * s, 32 * s, 32 * s, 39 * s, 18 * s, 26 * s, 26 * s); // left eye
+
+        // right eye (flip and draw)
+        ctx.save();
+        ctx.scale(-1, 1);
+        ctx.drawImage(img, 64 * s, 96 * s, 32 * s, 32 * s, -73 * s, 18 * s, 26 * s, 26 * s);
+        ctx.restore();
+    }
+
     // 获取所有 .user-item 元素
-    const userLists = document.querySelectorAll('.user-item');
+    var userLists = document.querySelectorAll('.user-item');
     // 计算 body 的高度
-    const bodyHeight = userLists.length * 89; // 每个 .user-item 高度为 89px
-
-    
+    var bodyHeight = userLists.length * 89; // 每个 .user-item 高度为 89px
 };
-
-
-
 </script>
 </body>
 </html>`
@@ -604,6 +692,7 @@ export async function apply(ctx: Context,Config) {
           let browser;
           let warband;
           let emoji;
+          let colorbodyconfig;
           try {
             // 使用图片处理好友列表
             const nickname1 = allfriends; // 在线好友名字
@@ -617,7 +706,12 @@ export async function apply(ctx: Context,Config) {
               }else{
                 emoji=false;
               }
-            const gethtml = await getimage(nickname1,warband,emoji)// 从函数中获取html}
+              if (Config?.colorbodyconfig === true) {
+                colorbodyconfig=true;
+                }else{
+                  colorbodyconfig=false;
+                }
+            const gethtml = await getimage(nickname1,warband,emoji,colorbodyconfig)// 从函数中获取html}
 
             browser = ctx.puppeteer.browser;
             context = await browser.createBrowserContext();
