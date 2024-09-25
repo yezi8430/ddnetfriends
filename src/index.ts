@@ -283,8 +283,8 @@ async function getimage(nickname1,warband,emoji,colorbodyconfig){
   if (colorbodyconfig ==true){
 
     const processColorBody = (colorBody) => {
-      if (colorBody === 'null') {
-          return null;
+      if (colorBody === 'null' || colorBody === undefined) {
+        return null;
       }
   
       // 将颜色转换为16进制并补足为6位
@@ -340,7 +340,7 @@ async function getimage(nickname1,warband,emoji,colorbodyconfig){
     newcolorbody=JSON.stringify(newcolorbody);
   }
   
-  console.log(newcolorbody)
+ // console.log(newcolorbody)
 //获取颜色end
   let emojistring;
   if (emoji ==true){
@@ -361,16 +361,10 @@ async function getimage(nickname1,warband,emoji,colorbodyconfig){
   //console.log(imageurl)
   for (let key in nickname1) {
     if (nickname1.hasOwnProperty(key)) {
-      if (warband === true) {
-        
-        if (nickname1[key].warband && nickname1[key].warband !== 'null') {
-          nickname1[key].warband = ' - [' + nickname1[key].warband+']';
-          
-        }
-      }
-      else
-      {
-        nickname1[key].warband =''
+      if (warband === true && nickname1[key].warband && nickname1[key].warband !== 'null') {
+        nickname1[key].warband = ` - [${nickname1[key].warband}]`;
+      } else {
+        nickname1[key].warband = '';
       }
       if (nickname1[key].afk =='true'){
         nickname1[key].afk='afk';
@@ -378,7 +372,6 @@ async function getimage(nickname1,warband,emoji,colorbodyconfig){
       else{
         nickname1[key].afk='';
       }
-
       
         div += `<div class="user-list">
                         <div class="user-item ${nickname1[key].afk}">
@@ -512,7 +505,7 @@ function loadImage(src, index) {
     }
 
     // 处理图像颜色的函数
-function processImageColor(img, color) {
+function processImageColor(img, color, brightnessFactor = 0.6) {
     var canvas = document.createElement('canvas');
     var ctx = canvas.getContext('2d');
     canvas.width = img.width;
@@ -529,10 +522,10 @@ function processImageColor(img, color) {
 
         for (var i = 0; i < data.length; i += 4) {
             var avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-            // 使用原始亮度调整新颜色
-            data[i] = Math.min(255, (rgb[0] * avg) / 128);
-            data[i + 1] = Math.min(255, (rgb[1] * avg) / 128);
-            data[i + 2] = Math.min(255, (rgb[2] * avg) / 128);
+            // 使用原始亮度调整新颜色，并应用亮度因子
+            data[i] = Math.min(255, (rgb[0] * avg * brightnessFactor) / 128);
+            data[i + 1] = Math.min(255, (rgb[1] * avg * brightnessFactor) / 128);
+            data[i + 2] = Math.min(255, (rgb[2] * avg * brightnessFactor) / 128);
             // 保持原始的 alpha 值
         }
 
@@ -635,6 +628,7 @@ function checkAndPrintFriendsnew(newclientInfoArray, backlist) {
   // 输出结果
   //console.log(formattedIntersection);
   return formattedIntersection;
+  
 }
 
 
@@ -671,95 +665,62 @@ export async function apply(ctx: Context,Config) {
   ctx.command('dd在线')
   .action(async ({ session }) => {
     if (Config?.useimage === true) {
-      const htmldata = await ddlist(ctx); //获取全部列表
-      const qqid = session.userId;
-      let backlist = await getlist(ctx, qqid);
-
-      if (backlist.length === 0) {
-        session.send('未找到相关数据,你似乎还没有导入好友列表');
-        return;
-      } else {
+      let browser, context, page;
+      try {
+        const htmldata = await ddlist(ctx); // 获取全部列表
+        const qqid = session.userId;
+        let backlist = await getlist(ctx, qqid);
+    
+        if (backlist.length === 0) {
+          session.send('未找到相关数据,你似乎还没有导入好友列表');
+          return;
+        }
+    
         let newclientInfoArray = updateserverinfo(htmldata);
         let allfriends = checkAndPrintFriendsnew(newclientInfoArray, backlist);
-        //console.log(allfriends)
-        //console.log(newclientInfoArray)
+    
         if (allfriends.length === 0) {
           session.send('无在线好友');
           return;
-        } else {
-          let page;
-          let context;
-          let browser;
-          let warband;
-          let emoji;
-          let colorbodyconfig;
-          try {
-            // 使用图片处理好友列表
-            const nickname1 = allfriends; // 在线好友名字
-            if (Config?.enablewarband === true) {
-            warband=true;
-            }else{
-              warband=false;
-            }
-            if (Config?.enableemoji === true) {
-              emoji=true;
-              }else{
-                emoji=false;
-              }
-              if (Config?.colorbodyconfig === true) {
-                colorbodyconfig=true;
-                }else{
-                  colorbodyconfig=false;
-                }
-            const gethtml = await getimage(nickname1,warband,emoji,colorbodyconfig)// 从函数中获取html}
-
-            browser = ctx.puppeteer.browser;
-            context = await browser.createBrowserContext();
-            page = await context.newPage();
-
-            await page.setContent(gethtml);
-            try {
-              await page.waitForNetworkIdle({ idleTime: 500, timeout: 5000 }); // 调整等待时间
-            } catch (error) {
-              session.send('网络似乎开小差了', error);
-              if (error.message && error.message.includes('Timeout')) {
-                console.error('Timeout error detected.');
-              }
-              throw error; // 抛出错误
-            }
-
-            const bodyHeight = await page.evaluate(() => {
-              return document.body.scrollHeight;
-            });
-
-            const clip = {
-              x: 0,        // 起始点 x 坐标
-              y: 0,        // 起始点 y 坐标
-              width: 315,  // 截图宽度
-              height: bodyHeight + 15  // 截图高度
-            };
-
-            const image = await page.screenshot({ clip });
-            await session.send(h.image(image, 'image/png'));
-          } catch (error) {
-            ctx.logger.error('Error during Puppeteer operations:', error);
-          } finally {
-            // 确保资源释放
-            if (page) {
-              try {
-                await page.close();
-              } catch (e) {
-                ctx.logger.error('Failed to close page:', e);
-              }
-            }
-            if (context) {
-              try {
-                await context.close();
-              } catch (e) {
-                ctx.logger.error('Failed to close context:', e);
-              }
-            }
-          }
+        }
+    
+        // 使用图片处理好友列表
+        const warband = Config?.enablewarband === true;
+        const emoji = Config?.enableemoji === true;
+        const colorbodyconfig = Config?.colorbodyconfig === true;
+        const gethtml = await getimage(allfriends, warband, emoji, colorbodyconfig);
+    
+        browser = ctx.puppeteer.browser;
+        context = await browser.createBrowserContext();
+        page = await context.newPage();
+    
+        await page.setContent(gethtml);
+        await Promise.race([
+          page.waitForNetworkIdle({ idleTime: 500, timeout: 5000 }),
+          new Promise(resolve => setTimeout(resolve, 5000))
+        ]);
+    
+        const bodyHeight = await page.evaluate(() => document.body.scrollHeight);
+    
+        const clip = {
+          x: 0,
+          y: 0,
+          width: 315,
+          height: bodyHeight + 15
+        };
+    
+        const image = await page.screenshot({ clip });
+        await session.send(h.image(image, 'image/png'));
+      } catch (error) {
+        ctx.logger.error('Error during operation:', error);
+        session.send('操作过程中发生错误，请稍后再试');
+      } finally {
+        // 确保资源释放
+        if (page) {
+          await page.close().catch(e => ctx.logger.error('Failed to close page:', e));
+        }
+        if (context) {
+          await context.close().catch(e => ctx.logger.error('Failed to close context:', e));
         }
       }
     } else {

@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-ddnetfriends",
   "description": "作用于ddnet好友列表在线情况查询,推荐使用图片样式,好友列表在游戏中点\"皮肤目录\"，上一级的settings_ddnet.cfg中",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
