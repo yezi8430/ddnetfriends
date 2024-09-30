@@ -42,6 +42,8 @@ export interface ddnetfriendsdata {
 //const import_koishi = require("koishi");
 
 
+
+
 //好友列表
 async function ddlist(ctx) {
   const urls = [
@@ -851,6 +853,96 @@ ctx.command('points [...args:string]')
       // 如果没有追加内容，执行原来的逻辑
       const target=null
       await getpoints(ctx, { session },target);
+    }
+  });
+
+ctx.command('删除玩家')
+.action(async ({ session }) => {
+await deleteplayer(ctx,{session})
+return;
+});
+
+//未完成地图
+async function fetchPlayerData(playerId, select, session) {
+  try {
+    const response = await fetch(`https://ddnet.org/players/?json2=${playerId}`);
+    const data = await response.json();
+
+    if (Object.keys(data).length === 0) {
+      session.send(`未查询到玩家ID: ${playerId}`);
+      return;
+    }
+
+    const selectNum = parseInt(select, 10);
+
+    let mapType;
+    switch (selectNum) {
+      case 1: mapType = 'Novice'; break;
+      case 2: mapType = 'Moderate'; break;
+      case 3: mapType = 'Brutal'; break;
+      case 4: mapType = 'Insane'; break;
+      case 5: mapType = 'Oldschool'; break;
+      case 7: mapType = 'Dummy'; break;
+      case 8: mapType = 'Solo'; break;
+      case 9: mapType = 'Race'; break;
+      case 6: 
+        const ddmaxTypes = ['DDmaX.Easy', 'DDmaX.Next', 'DDmaX.Pro', 'DDmaX.Nut'];
+        let unfinishedMaps = [];
+        ddmaxTypes.forEach(type => {
+          if (data.types && data.types[type] && data.types[type].maps) {
+            const maps = data.types[type].maps;
+            Object.keys(maps)
+              .filter(map => maps[map].finishes === 0)
+              .forEach(map => unfinishedMaps.push(`${map}(${maps[map].points} points - ${type})`));
+          }
+        });
+        if (unfinishedMaps.length > 0) {
+          session.send(`${playerId} 在古典系列中尚未完成的地图，共计${unfinishedMaps.length}张:\n${unfinishedMaps.join('\n')}`);
+        } else {
+          session.send(`${playerId} 已完成所有古典系列的地图。`);
+        }
+        return;
+      default:
+        session.send('无效的选择，请选择1-9之间的数字。');
+        return;
+    }
+
+    if (data.types && data.types[mapType] && data.types[mapType].maps) {
+      const maps = data.types[mapType].maps;
+      const unfinishedMaps = Object.keys(maps)
+        .filter(map => maps[map].finishes === 0)
+        .map(map => `${map}(${maps[map].points} points)`);
+
+      if (unfinishedMaps.length > 0) {
+        session.send(`${playerId} 在${mapType}类型中尚未完成的地图，共计${unfinishedMaps.length}张:\n${unfinishedMaps.join('\n')}`);
+      } else {
+        session.send(`${playerId} 已完成所有${mapType}类型的地图。`);
+      }
+    } else {
+      session.send(`无法获取 ${playerId} 的${mapType}地图数据。`);
+    }
+  } catch (error) {
+    console.error('获取数据时出错:', error);
+    session.send(`获取数据时出错: ${error.message}`);
+  }
+}
+
+
+
+
+//未完成地图
+ctx.command('地图情况 [...args:string]')
+  .action(async ({ session,args }) => {
+    if (args.length > 0) {
+    session.send('请输入要查询的序列号\n1.简单图(Novice)\n2.中阶图(Moderate)\n3.高阶图(Brutal)\n4.疯狂图(Insane)\n5.传统图(Oldschool)\n6.古典图(DDmaX)\n7.分身图(Dummy)\n8.单人图(Solo)\n9.竞速图(Race)');
+    const select = await session.prompt(10000);
+    console.log(select)
+    if (!select)return;
+    else fetchPlayerData(args,select,session);
+    }
+    else
+    {
+      return void session.send('未输入玩家ID,请重新输入\n如 地图情况 我的ID')
     }
   });
 
