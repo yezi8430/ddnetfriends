@@ -7,6 +7,7 @@ import type { Page } from 'puppeteer-core'
 import { arrayBuffer } from 'stream/consumers';
 import path from 'path'
 import fs from 'fs';
+const koishi = require("koishi");
 //const fontPath = path.resolve(__dirname, './font/seguiemj.TTF');
 const fontPath = require.resolve('../font/seguiemj.ttf');
 const fontBase64 = fs.readFileSync(fontPath, {encoding: 'base64'});
@@ -914,7 +915,7 @@ async function fetchPlayerData(playerId, select, session) {
         .map(map => `${map}(${maps[map].points} points)`);
 
       if (unfinishedMaps.length > 0) {
-        session.send(`${playerId} 在${mapType}类型中尚未完成的地图，共计${unfinishedMaps.length}张:\n${unfinishedMaps.join('\n')}`);
+        session.send((0, koishi.h)('message', { forward: true },`${playerId} 在${mapType}类型中尚未完成的地图，共计${unfinishedMaps.length}张:\n${unfinishedMaps.join('\n')}`));
       } else {
         session.send(`${playerId} 已完成所有${mapType}类型的地图。`);
       }
@@ -926,8 +927,6 @@ async function fetchPlayerData(playerId, select, session) {
     session.send(`获取数据时出错: ${error.message}`);
   }
 }
-
-
 
 
 //未完成地图
@@ -942,6 +941,7 @@ ctx.command('地图情况 [...args:string]')
     }
     else
     {
+
       return void session.send('未输入玩家ID,请重新输入\n如 地图情况 我的ID')
     }
   });
