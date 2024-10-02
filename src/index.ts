@@ -19,7 +19,10 @@ export const Config: Schema<Config> = Schema.object({
   useimage: Schema.boolean().description('是否使用图片样式').default(true),
   enablewarband: Schema.boolean().description('是否显示战队(返回的数据以官网为准,如果好友不是该战队,可能是别人恰分改的ID？)').default(true),
   enableemoji: Schema.boolean().description('是否开启emoji,改善有些id或战队使用emoji表情的显示情况,但是有可能会影响加载速度(maybe)').default(false),
-  colorbodyconfig:Schema.boolean().description('启用皮肤颜色,不过相比游戏内会显得更亮一点,自己看着要不要开关吧').default(false)
+  colorbodyconfig:Schema.boolean().description('启用皮肤颜色,不过相比游戏内会显得更亮一点,自己看着要不要开关吧').default(false),
+  Special_Attention:Schema.boolean().description('是否推送关注用户上线消息,发送失败的话可能要加机器人为好友(因为是私聊),如果关闭的话以下内容不会生效').default(false),
+  Special_Attention_Interval_time:Schema.number().description('默认每个关注对象推送间隔为12小时(如果推送过一次之后则下次直到12小时后上线才推送').default(12),
+  Special_Attention_listening:Schema.number().description('默认监听间隔,降低这个值可以减少查询的频率,默认监听间隔3分钟').default(3)
 });
 
 
@@ -360,7 +363,7 @@ async function getimage(nickname1,warband,emoji,colorbodyconfig){
 
   let newcolorbody;
   let colorbody;
-  let special_sttention=''
+  let special_attention_css=''
   if (colorbodyconfig ==true){
 
     const processColorBody = (colorBody) => {
@@ -455,16 +458,16 @@ async function getimage(nickname1,warband,emoji,colorbodyconfig){
       }
       
       if (nickname1[key].Special_Attention ==''){
-        special_sttention=''
+        special_attention_css=''
       }
       else{
-        special_sttention='special_sttention'
-        if (nickname1[key].afk =='true'){
-          special_sttention='special_sttention_afk'
+        special_attention_css='special_attention_css'
+        if (nickname1[key].afk =='afk'){
+          special_attention_css='special_attention_css_afk'
         }
       }
         div += `<div class="user-list">
-                        <div class="user-item ${nickname1[key].afk} ${special_sttention}">
+                        <div class="user-item ${nickname1[key].afk} ${special_attention_css}">
                             <canvas class="my-canvas" style="width: 96px; height: 64px" id=canvas`+[key]+`></canvas>
                             <div class="user-info">
                                 <p class="user-name">${nickname1[key].friendname}<span class="warband">${nickname1[key].warband}</span></p>
@@ -476,6 +479,7 @@ async function getimage(nickname1,warband,emoji,colorbodyconfig){
     }
 
 }
+
 
 const colorBodyArray = nickname1.map(item => item.color_body);
 
@@ -533,10 +537,10 @@ const colorBodyArray = nickname1.map(item => item.color_body);
         .afk{
         background-color: #998500;
         }
-        .special_sttention{
+        .special_attention_css{
         background-color: #ff8caa;
         }
-        .special_sttention_afk{
+        .special_attention_css_afk{
         background: linear-gradient(to right, #ff8caa, #998500);
 
         }
@@ -729,7 +733,8 @@ function checkAndPrintFriendsnew(newclientInfoArray, backlist) {
 
 
 export async function apply(ctx: Context,Config,session) {
-
+  //获取配置信息
+const config =ctx.config;
 
 // 初始化时更新群组数据
 ctx.on('ready', async () => {
@@ -764,7 +769,7 @@ ctx.on('ready', async () => {
       guild_id: session.guildId,
       user_id: session.userId
     }], ['guild_id', 'user_id'])
-    console.log(`新成员加入：${session.username}`)
+    //console.log(`新成员加入：${session.username}`)
   })
 
   // 监听成员退出事件
@@ -773,7 +778,7 @@ ctx.on('ready', async () => {
       guild_id: session.guildId,
       user_id: session.userId
     })
-    console.log(`成员退出：${session.username}`)
+    //console.log(`成员退出：${session.username}`)
   })
 
 
@@ -832,7 +837,10 @@ function findMatchingFriendnames(special_attention_newclientInfoArray, backlist)
   return Special_Attention_online;
 }
 
+if (ctx.config.Special_Attention ===true){
 
+  // 创建一个 Map 来存储 friendname 的最后发送时间
+const lastSentTimes = new Map();
 
 ctx.setInterval(async () => {
   try {
@@ -844,30 +852,54 @@ ctx.setInterval(async () => {
     // 获取所有群组数据
     const groupData = await ctx.database.get('ddnet_group_data', {});
 
+    // 创建一个 Set 来跟踪已经发送消息的用户 ID
+    const sentUsers = new Set();
+
+    // 获取当前时间
+    const now = Date.now();
+
     // 处理 Special_Attention_online 中的每个项目
     for (const item of Special_Attention_online) {
       const [friendnamePart, useridPart] = item.split(',');
       const friendname = friendnamePart.split(':')[1];
       const ddnetUserId = useridPart.split(':')[1];
 
+      // 检查该 friendname 是否在过去 12 小时内已经发送过
+      const lastSentTime = lastSentTimes.get(friendname);
+      if (lastSentTime && now - lastSentTime < ctx.config.Special_Attention_Interval_time * 60 * 60 * 1000) {
+        continue; // 如果在 12 小时内发送过，跳过这个 friendname
+      }
+
       // 遍历群组数据，为每个匹配的用户发送消息
       for (const data of groupData) {
         try {
-          // 这里假设 ddnetUserId 和 data.user_id 是可以直接比较的
-          // 如果不是，可能需要额外的逻辑来匹配用户
-          if (ddnetUserId === data.user_id) {
+          if (ddnetUserId === data.user_id && !sentUsers.has(data.user_id)) {
             await ctx.bots[0].sendPrivateMessage(data.user_id, `特别关注的在线用户: ${friendname}`);
+            sentUsers.add(data.user_id); // 将用户 ID 添加到已发送集合中
+            lastSentTimes.set(friendname, now); // 更新该 friendname 的最后发送时间
+            break; // 跳出内部循环，因为我们已经为这个用户发送了消息
           }
         } catch (sendError) {
           console.error(`Error sending message to user ${data.user_id}:`, sendError);
         }
       }
     }
+
+    // 清理 lastSentTimes 中超过 12 小时的记录
+    for (const [friendname, time] of lastSentTimes.entries()) {
+      if (now - time >= 12 * 60 * 60 * 1000) {
+        lastSentTimes.delete(friendname);
+      }
+    }
   } catch (error) {
     console.error('Error in interval function:', error);
     ctx.logger.error('发生错误，请检查日志。');
   }
-}, 1 * 30 * 1000);
+}, ctx.config.Special_Attention_listening * 60 * 1000);
+
+}
+
+
 
 
   // write your plugin here
