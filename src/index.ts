@@ -949,7 +949,7 @@ ctx.setInterval(async () => {
 
     // 清理 lastSentTimes 中超过 12 小时的记录
     for (const [friendname, time] of lastSentTimes.entries()) {
-      if (now - time >= 12 * 60 * 60 * 1000) {
+      if (now - time >= ctx.config.Special_Attention_Interval_time * 60 * 60 * 1000) {
         lastSentTimes.delete(friendname);
       }
     }
@@ -957,7 +957,7 @@ ctx.setInterval(async () => {
     ctx.logger(error);
     ctx.logger.error('发生错误，请检查日志。');
   }
-}, ctx.config.Special_Attention_listening * 60 * 1000);
+}, ctx.config.Special_Attention_listening * 10 * 1000);
 
 }
 
