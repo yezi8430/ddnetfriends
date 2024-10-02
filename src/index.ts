@@ -8,6 +8,7 @@ import { arrayBuffer } from 'stream/consumers';
 import path from 'path'
 import fs from 'fs';
 const koishi = require("koishi");
+
 //const fontPath = path.resolve(__dirname, './font/seguiemj.TTF');
 const fontPath = require.resolve('../font/seguiemj.ttf');
 const fontBase64 = fs.readFileSync(fontPath, {encoding: 'base64'});
@@ -29,7 +30,8 @@ export interface Config {
 
 declare module 'koishi' {
   interface Tables {
-    ddnetfriendsdata: ddnetfriendsdata
+    ddnetfriendsdata: ddnetfriendsdata,
+    ddnet_group_data:ddnet_group_data
   }
 }
 
@@ -38,11 +40,83 @@ export interface ddnetfriendsdata {
   userid:string
   friendname: string
   playername:string
+  Special_Attention:string
 
+}
+
+export interface ddnet_group_data {
+  id: number
+  guild_id: string
+  user_id: string
 }
 //const import_koishi = require("koishi");
 
 
+
+//未完成地图
+async function fetchPlayerData(playerId, select, session) {
+  try {
+    const response = await fetch(`https://ddnet.org/players/?json2=${playerId}`);
+    const data = await response.json();
+
+    if (Object.keys(data).length === 0) {
+      session.send(`未查询到玩家ID: ${playerId}`);
+      return;
+    }
+
+    const selectNum = parseInt(select, 10);
+
+    let mapType;
+    switch (selectNum) {
+      case 1: mapType = 'Novice'; break;
+      case 2: mapType = 'Moderate'; break;
+      case 3: mapType = 'Brutal'; break;
+      case 4: mapType = 'Insane'; break;
+      case 5: mapType = 'Oldschool'; break;
+      case 7: mapType = 'Dummy'; break;
+      case 8: mapType = 'Solo'; break;
+      case 9: mapType = 'Race'; break;
+      case 6: 
+        const ddmaxTypes = ['DDmaX.Easy', 'DDmaX.Next', 'DDmaX.Pro', 'DDmaX.Nut'];
+        let unfinishedMaps = [];
+        ddmaxTypes.forEach(type => {
+          if (data.types && data.types[type] && data.types[type].maps) {
+            const maps = data.types[type].maps;
+            Object.keys(maps)
+              .filter(map => maps[map].finishes === 0)
+              .forEach(map => unfinishedMaps.push(`${map}(${maps[map].points} points - ${type})`));
+          }
+        });
+        if (unfinishedMaps.length > 0) {
+          session.send(`${playerId} 在古典系列中尚未完成的地图，共计${unfinishedMaps.length}张:\n${unfinishedMaps.join('\n')}`);
+        } else {
+          session.send(`${playerId} 已完成所有古典系列的地图。`);
+        }
+        return;
+      default:
+        session.send('无效的选择，请选择1-9之间的数字。');
+        return;
+    }
+
+    if (data.types && data.types[mapType] && data.types[mapType].maps) {
+      const maps = data.types[mapType].maps;
+      const unfinishedMaps = Object.keys(maps)
+        .filter(map => maps[map].finishes === 0)
+        .map(map => `${map}(${maps[map].points} points)`);
+
+      if (unfinishedMaps.length > 0) {
+        session.send((0, koishi.h)('message', { forward: true },`${playerId} 在${mapType}类型中尚未完成的地图，共计${unfinishedMaps.length}张:\n${unfinishedMaps.join('\n')}`));
+      } else {
+        session.send(`${playerId} 已完成所有${mapType}类型的地图。`);
+      }
+    } else {
+      session.send(`无法获取 ${playerId} 的${mapType}地图数据。`);
+    }
+  } catch (error) {
+    console.error('获取数据时出错:', error);
+    session.send(`获取数据时出错: ${error.message}`);
+  }
+}
 
 
 //好友列表
@@ -263,7 +337,7 @@ var backlist
 //获取列表
 async function getlist(ctx: Context, qqid) {  
 
-  const backlist =await ctx.database.get('ddnetfriendsdata', {userid: [qqid],},['friendname'])
+  const backlist =await ctx.database.get('ddnetfriendsdata', {userid: [qqid],},['friendname','Special_Attention'])
 
   //console.log(backlist);
   return backlist;
@@ -280,9 +354,13 @@ async function deletefriend(ctx: Context, userid,friendname) {
   }
 }
 
+
+//编辑网页内容
 async function getimage(nickname1,warband,emoji,colorbodyconfig){
+
   let newcolorbody;
   let colorbody;
+  let special_sttention=''
   if (colorbodyconfig ==true){
 
     const processColorBody = (colorBody) => {
@@ -376,8 +454,17 @@ async function getimage(nickname1,warband,emoji,colorbodyconfig){
         nickname1[key].afk='';
       }
       
+      if (nickname1[key].Special_Attention ==''){
+        special_sttention=''
+      }
+      else{
+        special_sttention='special_sttention'
+        if (nickname1[key].afk =='true'){
+          special_sttention='special_sttention_afk'
+        }
+      }
         div += `<div class="user-list">
-                        <div class="user-item ${nickname1[key].afk}">
+                        <div class="user-item ${nickname1[key].afk} ${special_sttention}">
                             <canvas class="my-canvas" style="width: 96px; height: 64px" id=canvas`+[key]+`></canvas>
                             <div class="user-info">
                                 <p class="user-name">${nickname1[key].friendname}<span class="warband">${nickname1[key].warband}</span></p>
@@ -439,12 +526,19 @@ const colorBodyArray = nickname1.map(item => item.color_body);
             margin: 0;
         }
         .user-details {
-            color: #d4d4d4;
+            color: #f4f4f4;
             font-size: 0.8em;
             margin: 0;
         }
         .afk{
         background-color: #998500;
+        }
+        .special_sttention{
+        background-color: #ff8caa;
+        }
+        .special_sttention_afk{
+        background: linear-gradient(to right, #ff8caa, #998500);
+
         }
     </style>
 </head>
@@ -605,14 +699,15 @@ function updateserverinfo(htmldata)
 }
 
 function checkAndPrintFriendsnew(newclientInfoArray, backlist) {
-  const backlistSet = new Set(backlist.map(item => item.friendname));
+  // 创建一个 Map 来存储 backlist 中的 friendname 和 Special_Attention
+  const backlistMap = new Map(backlist.map(item => [item.friendname, item.Special_Attention]));
 
   // 过滤 newclientInfoArray，只保留在 backlist 中存在的非空 friendname
   const formattedIntersection = newclientInfoArray
     .map(item => {
       const parts = item.split(',');
       const friendname = parts[0].split(':')[1];
-      if (!friendname || !backlistSet.has(friendname)) {
+      if (!friendname || !backlistMap.has(friendname)) {
         return null;
       }
       return {
@@ -622,42 +717,157 @@ function checkAndPrintFriendsnew(newclientInfoArray, backlist) {
         mapname: parts[3].split(':')[1],
         color_body: parts[4].split(':')[1],
         color_feet: parts[5].split(':')[1],
-        warband:parts[6].split(':')[1],
-        afk:parts[7].split(':')[1]
+        warband: parts[6].split(':')[1],
+        afk: parts[7].split(':')[1],
+        Special_Attention: backlistMap.get(friendname) // 添加 Special_Attention 字段
       };
     })
     .filter(Boolean); // 过滤掉 null 值
 
-  // 输出结果
-  //console.log(formattedIntersection);
   return formattedIntersection;
-  
 }
 
 
+export async function apply(ctx: Context,Config,session) {
 
 
+// 初始化时更新群组数据
+ctx.on('ready', async () => {
+  const bots = ctx.bots
+  try {
+    for (const bot of bots) {
+      for await (const guild of bot.getGuildIter()) {
+        for await (const member of bot.getGuildMemberIter(guild.id)) {
+          try {
+            
+            await ctx.database.upsert('ddnet_group_data', [{
+              guild_id: guild.id,
+              user_id: member.user.id  // 使用 user 对象的 id 属性
+            }], ['guild_id', 'user_id'])
+          } catch (error) {
+            console.error(`数据库操作失败: ${error.message}`)
+          }
+        }
+
+      }
+    }
+    //console.log('群组数据初始化完成')
+  } catch (error) {
+    ctx.logger(`群组数据初始化失败: ${error.message}`)
+  }
+})
 
 
+  // 监听成员加入事件
+  ctx.on('guild-member-added', async (session) => {
+    await ctx.database.upsert('ddnet_group_data', [{
+      guild_id: session.guildId,
+      user_id: session.userId
+    }], ['guild_id', 'user_id'])
+    console.log(`新成员加入：${session.username}`)
+  })
 
+  // 监听成员退出事件
+  ctx.on('guild-member-removed', async (session) => {
+    await ctx.database.remove('ddnet_group_data', {
+      guild_id: session.guildId,
+      user_id: session.userId
+    })
+    console.log(`成员退出：${session.username}`)
+  })
 
-
-export async function apply(ctx: Context,Config) {
 
   ctx.model.extend('ddnetfriendsdata', {
     // 各字段的类型声明
     id: 'unsigned',
     userid:'string',
     friendname: 'string',
-    playername:'string'
+    playername:'string',
+    Special_Attention:'string'
 },
 {
   primary: 'id',
   autoInc: true,
 }
 )
-  
-  
+
+ctx.model.extend('ddnet_group_data', {
+  id: 'unsigned',
+  guild_id: 'string',
+  user_id: 'string'
+}, {
+  primary: 'id',
+  autoInc: true,
+})
+
+let allfriends,newclientInfoArray,special_attention_newclientInfoArray;
+
+
+//获取关注列表
+async function get_Special_Attention(ctx: Context) {  
+
+  const backlist =await ctx.database.get('ddnetfriendsdata', {Special_Attention: 'yes',},['userid','friendname'])
+
+  //console.log(backlist);
+  return backlist;
+}
+//查询关注列表
+function findMatchingFriendnames(special_attention_newclientInfoArray, backlist) {
+  const Special_Attention_online = [];
+
+  special_attention_newclientInfoArray.forEach(clientInfo => {
+    const friendnameMatch = clientInfo.match(/friendname:([^,]+)/);
+    if (friendnameMatch) {
+      const friendname = friendnameMatch[1];
+      if (friendname !== 'null') {
+        const backlistEntry = backlist.find(entry => entry && entry.friendname === friendname);
+        if (backlistEntry) {
+          const userid = backlistEntry.userid || 'unknown';
+          Special_Attention_online.push(`friendname:${friendname},userid:${userid}`);
+        }
+      }
+    }
+  });
+
+  return Special_Attention_online;
+}
+
+
+
+ctx.setInterval(async () => {
+  try {
+    const special_attention_htmldata = await ddlist(ctx);
+    special_attention_newclientInfoArray = await updateserverinfo(special_attention_htmldata);
+    const Special_Attention = await get_Special_Attention(ctx);
+    const Special_Attention_online = await findMatchingFriendnames(special_attention_newclientInfoArray, Special_Attention);
+
+    // 获取所有群组数据
+    const groupData = await ctx.database.get('ddnet_group_data', {});
+
+    // 处理 Special_Attention_online 中的每个项目
+    for (const item of Special_Attention_online) {
+      const [friendnamePart, useridPart] = item.split(',');
+      const friendname = friendnamePart.split(':')[1];
+      const ddnetUserId = useridPart.split(':')[1];
+
+      // 遍历群组数据，为每个匹配的用户发送消息
+      for (const data of groupData) {
+        try {
+          // 这里假设 ddnetUserId 和 data.user_id 是可以直接比较的
+          // 如果不是，可能需要额外的逻辑来匹配用户
+          if (ddnetUserId === data.user_id) {
+            await ctx.bots[0].sendPrivateMessage(data.user_id, `特别关注的在线用户: ${friendname}`);
+          }
+        } catch (sendError) {
+          console.error(`Error sending message to user ${data.user_id}:`, sendError);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error in interval function:', error);
+    ctx.logger.error('发生错误，请检查日志。');
+  }
+}, 1 * 30 * 1000);
 
 
   // write your plugin here
@@ -673,14 +883,15 @@ export async function apply(ctx: Context,Config) {
         const htmldata = await ddlist(ctx); // 获取全部列表
         const qqid = session.userId;
         let backlist = await getlist(ctx, qqid);
-    
         if (backlist.length === 0) {
           session.send('未找到相关数据,你似乎还没有导入好友列表');
           return;
         }
-    
-        let newclientInfoArray = updateserverinfo(htmldata);
-        let allfriends = checkAndPrintFriendsnew(newclientInfoArray, backlist);
+
+        
+        newclientInfoArray = updateserverinfo(htmldata);
+        allfriends = checkAndPrintFriendsnew(newclientInfoArray, backlist);
+        
     
         if (allfriends.length === 0) {
           session.send('无在线好友');
@@ -863,70 +1074,7 @@ await deleteplayer(ctx,{session})
 return;
 });
 
-//未完成地图
-async function fetchPlayerData(playerId, select, session) {
-  try {
-    const response = await fetch(`https://ddnet.org/players/?json2=${playerId}`);
-    const data = await response.json();
 
-    if (Object.keys(data).length === 0) {
-      session.send(`未查询到玩家ID: ${playerId}`);
-      return;
-    }
-
-    const selectNum = parseInt(select, 10);
-
-    let mapType;
-    switch (selectNum) {
-      case 1: mapType = 'Novice'; break;
-      case 2: mapType = 'Moderate'; break;
-      case 3: mapType = 'Brutal'; break;
-      case 4: mapType = 'Insane'; break;
-      case 5: mapType = 'Oldschool'; break;
-      case 7: mapType = 'Dummy'; break;
-      case 8: mapType = 'Solo'; break;
-      case 9: mapType = 'Race'; break;
-      case 6: 
-        const ddmaxTypes = ['DDmaX.Easy', 'DDmaX.Next', 'DDmaX.Pro', 'DDmaX.Nut'];
-        let unfinishedMaps = [];
-        ddmaxTypes.forEach(type => {
-          if (data.types && data.types[type] && data.types[type].maps) {
-            const maps = data.types[type].maps;
-            Object.keys(maps)
-              .filter(map => maps[map].finishes === 0)
-              .forEach(map => unfinishedMaps.push(`${map}(${maps[map].points} points - ${type})`));
-          }
-        });
-        if (unfinishedMaps.length > 0) {
-          session.send(`${playerId} 在古典系列中尚未完成的地图，共计${unfinishedMaps.length}张:\n${unfinishedMaps.join('\n')}`);
-        } else {
-          session.send(`${playerId} 已完成所有古典系列的地图。`);
-        }
-        return;
-      default:
-        session.send('无效的选择，请选择1-9之间的数字。');
-        return;
-    }
-
-    if (data.types && data.types[mapType] && data.types[mapType].maps) {
-      const maps = data.types[mapType].maps;
-      const unfinishedMaps = Object.keys(maps)
-        .filter(map => maps[map].finishes === 0)
-        .map(map => `${map}(${maps[map].points} points)`);
-
-      if (unfinishedMaps.length > 0) {
-        session.send((0, koishi.h)('message', { forward: true },`${playerId} 在${mapType}类型中尚未完成的地图，共计${unfinishedMaps.length}张:\n${unfinishedMaps.join('\n')}`));
-      } else {
-        session.send(`${playerId} 已完成所有${mapType}类型的地图。`);
-      }
-    } else {
-      session.send(`无法获取 ${playerId} 的${mapType}地图数据。`);
-    }
-  } catch (error) {
-    console.error('获取数据时出错:', error);
-    session.send(`获取数据时出错: ${error.message}`);
-  }
-}
 
 
 //未完成地图
@@ -935,7 +1083,6 @@ ctx.command('地图情况 [...args:string]')
     if (args.length > 0) {
     session.send('请输入要查询的序列号\n1.简单图(Novice)\n2.中阶图(Moderate)\n3.高阶图(Brutal)\n4.疯狂图(Insane)\n5.传统图(Oldschool)\n6.古典图(DDmaX)\n7.分身图(Dummy)\n8.单人图(Solo)\n9.竞速图(Race)');
     const select = await session.prompt(10000);
-    console.log(select)
     if (!select)return;
     else fetchPlayerData(args,select,session);
     }
@@ -952,5 +1099,45 @@ await deleteplayer(ctx,{session})
 return;
 });
 
+async function updateSpecialAttention(userid, special_sttention) {
+  const userId = userid;
+  const friendName = special_sttention[0];
+
+  // 尝试查找匹配的记录
+  const existingRecord = await ctx.database.get('ddnetfriendsdata', {
+    userid: userId,
+    friendname: friendName
+  });
+
+  if (existingRecord.length > 0) {
+    // 如果记录存在，更新 Special_Attention 字段
+    await ctx.database.set('ddnetfriendsdata', {
+      userid: userId,
+      friendname: friendName
+    }, {
+      Special_Attention: 'yes'
+    });
+
+  } else {
+    // 如果记录不存在，创建新记录
+    await ctx.database.create('ddnetfriendsdata', {
+      userid: userId,
+      friendname: friendName,
+      Special_Attention: 'yes'
+    });
+  }
+}
+
+ctx.command('关注 [...args:string]')
+.action(async ({ session, args }) => {
+  if (args.length > 0) {
+    let special_sttention = args;
+    let userid = session.userId;
+    await updateSpecialAttention(userid, special_sttention);
+    return '关注完成:'+special_sttention;
+  } else {
+    return '未输入玩家ID，请重新输入\n如 关注 我的ID';
+  }
+});
 
 }

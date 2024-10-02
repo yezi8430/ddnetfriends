@@ -12,6 +12,7 @@ export interface Config {
 declare module 'koishi' {
     interface Tables {
         ddnetfriendsdata: ddnetfriendsdata;
+        ddnet_group_data: ddnet_group_data;
     }
 }
 export interface ddnetfriendsdata {
@@ -19,5 +20,11 @@ export interface ddnetfriendsdata {
     userid: string;
     friendname: string;
     playername: string;
+    Special_Attention: string;
 }
-export declare function apply(ctx: Context, Config: any): Promise<void>;
+export interface ddnet_group_data {
+    id: number;
+    guild_id: string;
+    user_id: string;
+}
+export declare function apply(ctx: Context, Config: any, session: any): Promise<void>;
