@@ -55,6 +55,68 @@ export interface ddnet_group_data {
 //const import_koishi = require("koishi");
 
 
+//关注玩家
+async function updateSpecialAttention(ctx, userid, special_attention) {
+  const userId = userid;
+  const friendName = special_attention[0];
+
+  // 尝试查找匹配的记录
+  const existingRecord = await ctx.database.get('ddnetfriendsdata', {
+    userid: userId,
+    friendname: friendName
+  });
+
+  if (existingRecord.length > 0) {
+    // 如果记录存在，检查 Special_Attention 字段
+    if (existingRecord[0].Special_Attention === 'yes') {
+      return '已经关注过这个人了哦';
+    }
+
+    // 如果未关注，更新 Special_Attention 字段
+    await ctx.database.set('ddnetfriendsdata', {
+      userid: userId,
+      friendname: friendName
+    }, {
+      Special_Attention: 'yes'
+    });
+
+  } else {
+    // 如果记录不存在，创建新记录
+    await ctx.database.create('ddnetfriendsdata', {
+      userid: userId,
+      friendname: friendName,
+      Special_Attention: 'yes'
+    });
+  }
+  return '关注完成:' + special_attention;
+}
+
+//取消关注
+async function cancelSpecialAttention(ctx,userid, special_attention) {
+  const userId = userid;
+  const friendName = special_attention[0];
+
+  // 尝试查找匹配的记录
+  const existingRecord = await ctx.database.get('ddnetfriendsdata', {
+    userid: userId,
+    friendname: friendName
+  });
+
+  if (existingRecord.length === 0 || (existingRecord.length > 0 && existingRecord[0].Special_Attention === '')) {
+    return '你根本没有关注这个人！';
+  }
+
+  if (existingRecord.length > 0) {
+    await ctx.database.set('ddnetfriendsdata', {
+      userid: userId,
+      friendname: friendName
+    }, {
+      Special_Attention: ''
+    });
+    return '取消关注:' + friendName;
+  }
+}
+
 
 //未完成地图
 async function fetchPlayerData(playerId, select, session) {
@@ -769,7 +831,7 @@ ctx.on('ready', async () => {
       guild_id: session.guildId,
       user_id: session.userId
     }], ['guild_id', 'user_id'])
-    //console.log(`新成员加入：${session.username}`)
+    console.log(`新成员加入：${session.username}`)
   })
 
   // 监听成员退出事件
@@ -778,7 +840,7 @@ ctx.on('ready', async () => {
       guild_id: session.guildId,
       user_id: session.userId
     })
-    //console.log(`成员退出：${session.username}`)
+    console.log(`成员退出：${session.username}`)
   })
 
 
@@ -880,7 +942,7 @@ ctx.setInterval(async () => {
             break; // 跳出内部循环，因为我们已经为这个用户发送了消息
           }
         } catch (sendError) {
-          console.error(`Error sending message to user ${data.user_id}:`, sendError);
+          ctx.logger(sendError);
         }
       }
     }
@@ -892,7 +954,7 @@ ctx.setInterval(async () => {
       }
     }
   } catch (error) {
-    console.error('Error in interval function:', error);
+    ctx.logger(error);
     ctx.logger.error('发生错误，请检查日志。');
   }
 }, ctx.config.Special_Attention_listening * 60 * 1000);
@@ -900,14 +962,12 @@ ctx.setInterval(async () => {
 }
 
 
-
-
   // write your plugin here
 
 
 
   
-  ctx.command('dd在线')
+  ctx.command('dd在线', '输入‘帮助 dd在线’查看其他命令')
   .action(async ({ session }) => {
     if (Config?.useimage === true) {
       let browser, context, page;
@@ -997,7 +1057,7 @@ ctx.setInterval(async () => {
 
 //--------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-ctx.command('dd删除好友')
+ctx.command('dd在线').subcommand('dd删除好友')
  
 .action(async ({session}) => {
   const userid = session.userId;  // 定义用户 ID
@@ -1048,7 +1108,7 @@ ctx.command('dd删除好友')
 
 
 
-  ctx.command('dd添加好友')
+  ctx.command('dd在线').subcommand('dd添加好友')
   .action(async ({ session }) => {
     session.send('请在游戏中点击皮肤目录,并返回上一级菜单,双击settings_ddnet.cfg,用笔记本或记事本打开,复制里面所有的内容粘贴过来\n输入:取消\n可以取消输入');
 
@@ -1079,14 +1139,14 @@ ctx.command('dd删除好友')
 
 
 //查分\添加玩家id
-ctx.command('添加玩家')
+ctx.command('dd在线').subcommand('添加玩家')
 .action(async ({ session }) => {
 await addplayer(ctx,{session})
 return;
 });
 
 
-ctx.command('points [...args:string]')
+ctx.command('dd在线').subcommand('points [...args:string]')
   .alias('查分')
   .action(async ({ session, args }) => {
     if (args.length > 0) {
@@ -1100,17 +1160,10 @@ ctx.command('points [...args:string]')
     }
   });
 
-ctx.command('删除玩家')
-.action(async ({ session }) => {
-await deleteplayer(ctx,{session})
-return;
-});
-
-
 
 
 //未完成地图
-ctx.command('地图情况 [...args:string]')
+ctx.command('dd在线').subcommand('地图情况 [...args:string]')
   .action(async ({ session,args }) => {
     if (args.length > 0) {
     session.send('请输入要查询的序列号\n1.简单图(Novice)\n2.中阶图(Moderate)\n3.高阶图(Brutal)\n4.疯狂图(Insane)\n5.传统图(Oldschool)\n6.古典图(DDmaX)\n7.分身图(Dummy)\n8.单人图(Solo)\n9.竞速图(Race)');
@@ -1125,51 +1178,37 @@ ctx.command('地图情况 [...args:string]')
     }
   });
 
-ctx.command('删除玩家')
+ctx.command('dd在线').subcommand('删除玩家')
 .action(async ({ session }) => {
 await deleteplayer(ctx,{session})
 return;
 });
 
-async function updateSpecialAttention(userid, special_sttention) {
-  const userId = userid;
-  const friendName = special_sttention[0];
 
-  // 尝试查找匹配的记录
-  const existingRecord = await ctx.database.get('ddnetfriendsdata', {
-    userid: userId,
-    friendname: friendName
-  });
 
-  if (existingRecord.length > 0) {
-    // 如果记录存在，更新 Special_Attention 字段
-    await ctx.database.set('ddnetfriendsdata', {
-      userid: userId,
-      friendname: friendName
-    }, {
-      Special_Attention: 'yes'
-    });
-
-  } else {
-    // 如果记录不存在，创建新记录
-    await ctx.database.create('ddnetfriendsdata', {
-      userid: userId,
-      friendname: friendName,
-      Special_Attention: 'yes'
-    });
-  }
-}
-
-ctx.command('关注 [...args:string]')
+ctx.command('dd在线').subcommand('关注 [...args:string]')
 .action(async ({ session, args }) => {
   if (args.length > 0) {
     let special_sttention = args;
     let userid = session.userId;
-    await updateSpecialAttention(userid, special_sttention);
-    return '关注完成:'+special_sttention;
+    return await updateSpecialAttention(ctx,userid, special_sttention);
+    
   } else {
     return '未输入玩家ID，请重新输入\n如 关注 我的ID';
   }
 });
+
+ctx.command('dd在线').subcommand('取消关注 [...args:string]')
+.action(async ({ session, args }) => {
+  if (args.length > 0) {
+    let special_sttention = args;
+    let userid = session.userId;
+    return await cancelSpecialAttention(ctx,userid, special_sttention);
+  } else {
+    return '未输入玩家ID，请重新输入\n如 取消关注 我的ID';
+  }
+});
+
+
 
 }
