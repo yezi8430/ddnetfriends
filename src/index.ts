@@ -56,9 +56,24 @@ export interface ddnet_group_data {
 }
 //const import_koishi = require("koishi");
 
+//看调用私聊还是群聊
+async function sendMessage(session,message) {
+  try {
+    if (session.event.channel.type === 1) {
+      // 私聊
+      await session.bot.sendPrivateMessage(session.userId,message);
+    } else {
+      // 群聊
+      await session.send(message);
+      
+    }
+  } catch (error) {
+    console.error('发送消息时出错:', error);
+  }
+}
 
 //关注玩家
-async function updateSpecialAttention(ctx, userid, special_attention) {
+async function updateSpecialAttention(ctx, userid, special_attention,session) {
   const userId = userid;
   const friendName = special_attention[0];
 
@@ -71,7 +86,8 @@ async function updateSpecialAttention(ctx, userid, special_attention) {
   if (existingRecord.length > 0) {
     // 如果记录存在，检查 Special_Attention 字段
     if (existingRecord[0].Special_Attention === 'yes') {
-      return '已经关注过这个人了哦';
+      return await sendMessage(session,'已经关注过这个人了哦');
+      
     }
 
     // 如果未关注，更新 Special_Attention 字段
@@ -90,11 +106,11 @@ async function updateSpecialAttention(ctx, userid, special_attention) {
       Special_Attention: 'yes'
     });
   }
-  return '关注完成:' + special_attention;
+  return await sendMessage(session,'关注完成:' + special_attention);
 }
 
 //取消关注
-async function cancelSpecialAttention(ctx,userid, special_attention) {
+async function cancelSpecialAttention(ctx,userid, special_attention,session) {
   const userId = userid;
   const friendName = special_attention[0];
 
@@ -105,7 +121,7 @@ async function cancelSpecialAttention(ctx,userid, special_attention) {
   });
 
   if (existingRecord.length === 0 || (existingRecord.length > 0 && existingRecord[0].Special_Attention === '')) {
-    return '你根本没有关注这个人！';
+    return await sendMessage(session,'你根本没有关注这个人！');
   }
 
   if (existingRecord.length > 0) {
@@ -115,7 +131,7 @@ async function cancelSpecialAttention(ctx,userid, special_attention) {
     }, {
       Special_Attention: ''
     });
-    return '取消关注:' + friendName;
+    return await sendMessage(session,'取消关注:' + friendName);
   }
 }
 
@@ -127,7 +143,7 @@ async function fetchPlayerData(playerId, select, session) {
     const data = await response.json();
 
     if (Object.keys(data).length === 0) {
-      session.send(`未查询到玩家ID: ${playerId}`);
+      await sendMessage(session,`未查询到玩家ID: ${playerId}`);
       return;
     }
 
@@ -155,13 +171,14 @@ async function fetchPlayerData(playerId, select, session) {
           }
         });
         if (unfinishedMaps.length > 0) {
-          session.send(`${playerId} 在古典系列中尚未完成的地图，共计${unfinishedMaps.length}张:\n${unfinishedMaps.join('\n')}`);
+          await sendMessage(session,`${playerId} 在古典系列中尚未完成的地图，共计${unfinishedMaps.length}张:\n${unfinishedMaps.join('\n')}`);
         } else {
-          session.send(`${playerId} 已完成所有古典系列的地图。`);
+          await sendMessage(session,`${playerId} 已完成所有古典系列的地图。`);
         }
         return;
       default:
-        session.send('无效的选择，请选择1-9之间的数字。');
+        await sendMessage(session,'无效的选择，请选择1-9之间的数字。');
+        
         return;
     }
 
@@ -172,16 +189,17 @@ async function fetchPlayerData(playerId, select, session) {
         .map(map => `${map}(${maps[map].points} points)`);
 
       if (unfinishedMaps.length > 0) {
-        session.send((0, koishi.h)('message', { forward: true },`${playerId} 在${mapType}类型中尚未完成的地图，共计${unfinishedMaps.length}张:\n${unfinishedMaps.join('\n')}`));
+
+        await sendMessage(session,(0, koishi.h)('message', { forward: true },`${playerId} 在${mapType}类型中尚未完成的地图，共计${unfinishedMaps.length}张:\n${unfinishedMaps.join('\n')}`));
       } else {
-        session.send(`${playerId} 已完成所有${mapType}类型的地图。`);
+        await sendMessage(session,`${playerId} 已完成所有${mapType}类型的地图。`);
       }
     } else {
-      session.send(`无法获取 ${playerId} 的${mapType}地图数据。`);
+      await sendMessage(session,`无法获取 ${playerId} 的${mapType}地图数据。`);
     }
   } catch (error) {
     console.error('获取数据时出错:', error);
-    session.send(`获取数据时出错: ${error.message}`);
+    await sendMessage(session,`获取数据时出错: ${error.message}`);
   }
 }
 
@@ -225,11 +243,13 @@ async function ddlist(ctx) {
 }
 
 async function addplayer(ctx:Context,{session}){
-  session.send( "请输入要添加的玩家id");
+
+  await sendMessage(session,'请输入要添加的玩家id');
   const input = await session.prompt(20000);
   if (input && input.length !== 0)
     await ctx.database.create("ddnetfriendsdata", { userid:session.userId,playername: input});
-  session.send('添加成功,玩家id:'+input)
+
+  await sendMessage(session,'添加成功,玩家id:'+input);
   return;
 }
 
@@ -243,13 +263,13 @@ async function deleteplayer(ctx: Context, { session }) {
   
   if (validPlayers.length > 0) {
     const playerList = validPlayers.map((player, index) => `${index + 1}.${player.playername}`).join('\n');
-    session.send(`当前玩家列表：\n${playerList}\n\n请输入要删除的玩家序号：`);
+    await sendMessage(session,`当前玩家列表：\n${playerList}\n\n请输入要删除的玩家序号：`);
     
     const input = await session.prompt(20000);
     const index = parseInt(input) - 1;
     
     if (isNaN(index) || index < 0 || index >= validPlayers.length) {
-      session.send("无效的输入，删除取消");
+      await sendMessage(session,'无效的输入，删除取消');
       return;
     }
     
@@ -258,11 +278,11 @@ async function deleteplayer(ctx: Context, { session }) {
       userid: session.userId, 
       playername: playerToDelete.playername 
     });
-    session.send('删除成功，玩家: ' + playerToDelete.playername);
+    await sendMessage(session,'删除成功，玩家: ' + playerToDelete.playername);
     return;
   } else {
     return;
-    //session.send('没有找到任何玩家，删除取消');
+
   }
 }
 
@@ -288,12 +308,12 @@ async function getpoints(ctx: Context,{ session },target) {
   // 添加返回内容为空的提示
   if (playernamelist.length === 0) {
     
-    session.send( "未找到匹配的玩家id,是否要添加");
+    await sendMessage(session,'未找到匹配的玩家id,是否要添加');
     const input = await session.prompt(20000);
       if (input && input.length !==0)
       {
         await ctx.database.create("ddnetfriendsdata", {userid:session.userId, playername: input});
-        session.send('添加成功,玩家id:'+input)
+        await sendMessage(session,'添加成功,玩家id:'+input);
         return;
       }
       else{
@@ -307,13 +327,13 @@ async function getpoints(ctx: Context,{ session },target) {
     const formattedPlayerNames = newPlayerArray.map((name, index) => 
       `${index + 1}.${name}`
   ).join('\n');
-    session.send('请输入要查询玩家的序号:\n'+formattedPlayerNames)
+    await sendMessage(session,'请输入要查询玩家的序号:\n'+formattedPlayerNames);
     const input = await session.prompt(20000);
     if (input && input.length !== 0){
 
       const inputNumber = parseInt(input);
       if (isNaN(inputNumber) || inputNumber < 1 || inputNumber > playernamelist.length) {
-        session.send("无效输入。请输入一个有效的序号。");
+        await sendMessage(session,'无效输入。请输入一个有效的序号。');
         return;
       }
       const fetchPromises = await fetch(pointsurl+playernamelist[input-1].playername)
@@ -323,10 +343,10 @@ async function getpoints(ctx: Context,{ session },target) {
         const playerName = fetchPromises.player;
         const playerPoints = fetchPromises.points.points;
         const playerRank = fetchPromises.points.rank;
-        session.send(playerName+':'+playerPoints+'排名:'+playerRank)
+        await sendMessage(session,playerName+':'+playerPoints+'排名:'+playerRank);
         return;
       }else {
-        session.send("没有查到这个玩家,看一下是不是输错id了吧");
+        await sendMessage(session,'没有查到这个玩家,看一下是不是输错id了吧');
       }
     }
     else{
@@ -347,10 +367,10 @@ async function getpoints(ctx: Context,{ session },target) {
           const playerName = fetchPromises.player;
           const playerPoints = fetchPromises.points.points;
           const playerRank = fetchPromises.points.rank;
-          session.send(playerName+':'+playerPoints+'排名:'+playerRank)
+          await sendMessage(session,playerName+':'+playerPoints+'排名:'+playerRank);
           return;
         }else {
-          session.send("没有查到这个玩家,看一下是不是输错id了吧");
+          await sendMessage(session,'没有查到这个玩家,看一下是不是输错id了吧');
         }
     }
     catch{
@@ -358,7 +378,7 @@ async function getpoints(ctx: Context,{ session },target) {
     }
   }
  }catch(error){
-  session.send('网络似乎开了会儿小差'+error)
+  await sendMessage(session,'网络似乎开了会儿小差'+error);
   return;
  }
 }
@@ -915,6 +935,8 @@ function findMatchingFriendnames(special_attention_newclientInfoArray, backlist)
   return Special_Attention_online;
 }
 
+
+
 if (ctx.config.Special_Attention ===true){
   
 
@@ -1006,7 +1028,7 @@ if (ctx.config.Special_Attention ===true){
         const qqid = session.userId;
         let backlist = await getlist(ctx, qqid);
         if (backlist.length === 0) {
-          session.send('未找到相关数据,你似乎还没有导入好友列表');
+          await sendMessage(session,'未找到相关数据,你似乎还没有导入好友列表');
           return;
         }
 
@@ -1016,7 +1038,7 @@ if (ctx.config.Special_Attention ===true){
         
     
         if (allfriends.length === 0) {
-          session.send('无在线好友');
+          await sendMessage(session,'无在线好友');
           return;
         }
     
@@ -1046,10 +1068,11 @@ if (ctx.config.Special_Attention ===true){
         };
     
         const image = await page.screenshot({ clip });
-        await session.send(h.image(image, 'image/png'));
+        await sendMessage(session,h.image(image, 'image/png'));
       } catch (error) {
         ctx.logger.error('Error during operation:', error);
-        session.send('操作过程中发生错误，请稍后再试');
+        await sendMessage(session,'操作过程中发生错误，请稍后再试');
+        
       } finally {
         // 确保资源释放
         if (page) {
@@ -1067,16 +1090,16 @@ if (ctx.config.Special_Attention ===true){
       let backlist = await getlist(ctx, qqid);
 
       if (backlist.length === 0) {
-        session.send('未找到相关数据,你似乎还没有导入好友列表');
+        await sendMessage(session,'未找到相关数据,你似乎还没有导入好友列表');
         return;
       } else {
         let allfriends = checkAndPrintFriendsnew(newclientInfoArray, backlist);
         if (allfriends.length === 0) {
-          session.send('无在线好友');
+          await sendMessage(session,'无在线好友');
           return;
         } else {
           let resultString = allfriends.map(friend => `${friend.friendname}\n`).join('');
-          session.send(h('at', { id: session.userId }) + '你的在线好友:\n' + resultString);
+          await sendMessage(session,h('at', { id: session.userId }) + '你的在线好友:\n' + resultString);
           return;
         }
       }
@@ -1094,11 +1117,11 @@ ctx.command('dd在线').subcommand('dd删除好友')
   const userid = session.userId;  // 定义用户 ID
   
   try {
-    session.send('输入好友列表，如 123,234,abc,支持单个或批量');
+    await sendMessage(session,'输入好友列表，如 123,234,abc,支持单个或批量');
     const content = await session.prompt(15000);
     
     if (!content) {
-      session.send('操作超时，已取消。');
+      await sendMessage(session,'操作超时，已取消。');
       return;
     }
 
@@ -1112,12 +1135,15 @@ ctx.command('dd在线').subcommand('dd删除好友')
 
     const deletesum = await deletefriend(ctx, userid, arrfriends);
     if (deletesum !== 0) {  
-      session.send("已删除" + deletesum + "个好友");  
-    } else {  
-      session.send("删除" + deletesum + "个好友，似乎没有找到匹配项");  
+      await sendMessage(session,'已删除' + deletesum + '个好友');
+      return;
+    } else { 
+      await sendMessage(session,'删除' + deletesum + '个好友，似乎没有找到匹配项');
+      return;
     }
   } catch (error) {
-    session.send('发生错误：' + error.message);
+    await sendMessage(session,'发生错误：' + error.message);
+    return;
   }
 });
 
@@ -1127,7 +1153,8 @@ ctx.command('dd在线').subcommand('dd删除全部好友')
  
 .action(async ({session}) => {
   const userid = session.userId;
-  return await deleteallfriend(ctx, userid);
+  await sendMessage(session,await deleteallfriend(ctx, userid));
+  return;
 })
 
 //--------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1136,12 +1163,11 @@ ctx.command('dd在线').subcommand('dd删除全部好友')
 
   ctx.command('dd在线').subcommand('dd添加好友')
   .action(async ({ session }) => {
-    session.send('请在游戏中点击皮肤目录,并返回上一级菜单,双击settings_ddnet.cfg,用笔记本或记事本打开,复制里面所有的内容粘贴过来\n输入:取消\n可以取消输入');
-
+    await sendMessage(session,'请在游戏中点击皮肤目录,并返回上一级菜单,双击settings_ddnet.cfg,用笔记本或记事本打开,复制里面所有的内容粘贴过来\n输入:取消\n可以取消输入');
     const content = await session.prompt();
 
     if (content === '取消' || content ===null) {
-      await session.send("已取消输入");
+      await sendMessage(session,'已取消输入');
       return;
     }
 
@@ -1155,7 +1181,8 @@ ctx.command('dd在线').subcommand('dd删除全部好友')
     }));
 
     await addlist(ctx, arrfriends);
-    return void session.send("添加成功");
+    await sendMessage(session,'添加成功');
+    return;
   });
 
 
@@ -1192,15 +1219,15 @@ ctx.command('dd在线').subcommand('points [...args:string]')
 ctx.command('dd在线').subcommand('地图情况 [...args:string]')
   .action(async ({ session,args }) => {
     if (args.length > 0) {
-    session.send('请输入要查询的序列号\n1.简单图(Novice)\n2.中阶图(Moderate)\n3.高阶图(Brutal)\n4.疯狂图(Insane)\n5.传统图(Oldschool)\n6.古典图(DDmaX)\n7.分身图(Dummy)\n8.单人图(Solo)\n9.竞速图(Race)');
+    await sendMessage(session,'请输入要查询的序列号\n1.简单图(Novice)\n2.中阶图(Moderate)\n3.高阶图(Brutal)\n4.疯狂图(Insane)\n5.传统图(Oldschool)\n6.古典图(DDmaX)\n7.分身图(Dummy)\n8.单人图(Solo)\n9.竞速图(Race)');
     const select = await session.prompt(10000);
     if (!select)return;
     else fetchPlayerData(args,select,session);
     }
     else
     {
-
-      return void session.send('未输入玩家ID,请重新输入\n如 地图情况 我的ID')
+      await sendMessage(session,'未输入玩家ID,请重新输入\n如 地图情况 我的ID');
+      return;
     }
   });
 
@@ -1217,10 +1244,11 @@ ctx.command('dd在线').subcommand('关注 [...args:string]')
   if (args.length > 0) {
     let special_sttention = args;
     let userid = session.userId;
-    return await updateSpecialAttention(ctx,userid, special_sttention);
+    return await updateSpecialAttention(ctx,userid, special_sttention,session);
     
   } else {
-    return '未输入玩家ID，请重新输入\n如 关注 我的ID';
+    await sendMessage(session,'未输入玩家ID，请重新输入\n如 关注 我的ID');
+    return ;
   }
 });
 
@@ -1229,9 +1257,10 @@ ctx.command('dd在线').subcommand('取消关注 [...args:string]')
   if (args.length > 0) {
     let special_sttention = args;
     let userid = session.userId;
-    return await cancelSpecialAttention(ctx,userid, special_sttention);
+    return await cancelSpecialAttention(ctx,userid, special_sttention,session);
   } else {
-    return '未输入玩家ID，请重新输入\n如 取消关注 我的ID';
+    await sendMessage(session,'未输入玩家ID，请重新输入\n如 取消关注 我的ID');
+    return;
   }
 });
 
