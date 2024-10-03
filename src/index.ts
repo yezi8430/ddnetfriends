@@ -52,6 +52,7 @@ export interface ddnet_group_data {
   guild_id: string
   user_id: string
   last_sent_time:string
+  friendname:string
 }
 //const import_koishi = require("koishi");
 
@@ -875,7 +876,8 @@ ctx.model.extend('ddnet_group_data', {
   id: 'unsigned',
   guild_id: 'string',
   user_id: 'string',
-  last_sent_time:'string'
+  last_sent_time:'string',
+  friendname:'string'
 }, {
   primary: 'id',
   autoInc: true,
@@ -927,8 +929,8 @@ if (ctx.config.Special_Attention ===true){
       // 获取所有群组数据
       const groupData = await ctx.database.get('ddnet_group_data', {});
   
-      // 创建一个 Set 来跟踪已经发送消息的用户 ID
-      const sentUsers = new Set();
+      // 创建一个 Set 来跟踪已经发送消息的用户 ID 和 friendname 组合
+      const sentCombinations = new Set();
   
       // 获取当前时间
       const now = Date.now();
@@ -939,24 +941,37 @@ if (ctx.config.Special_Attention ===true){
         const friendname = friendnamePart.split(':')[1];
         const ddnetUserId = useridPart.split(':')[1];
         
-        // 遍历群组数据，为每个匹配的用户检查和发送消息
-        for (const data of groupData) {
+        // 检查该用户 ID 和 friendname 的组合是否存在
+        const existingRecord = groupData.find(data => data.user_id === ddnetUserId && data.friendname === friendname);
+        
+        if (existingRecord) {
+          // 如果记录存在，检查是否需要发送消息
+          const lastSentTime = existingRecord.last_sent_time ? parseInt(existingRecord.last_sent_time) : 0;
+          if (now - lastSentTime < ctx.config.Special_Attention_Interval_time * 60 * 60 * 1000) {
+            continue; // 如果在指定时间内发送过，跳过这个组合
+          }
+        }
+  
+        // 如果这个组合还没有发送过消息
+        if (!sentCombinations.has(`${ddnetUserId}-${friendname}`)) {
           try {
-            if (ddnetUserId === data.user_id && !sentUsers.has(data.user_id)) {
-              // 检查该 friendname 是否在过去指定时间内已经发送过
-              const lastSentTime = data.last_sent_time ? parseInt(data.last_sent_time) : 0;
-              if (now - lastSentTime < ctx.config.Special_Attention_Interval_time * 1 * 60 * 1000) {
-                continue; // 如果在指定时间内发送过，跳过这个 friendname
-              }
+            await ctx.bots[0].sendPrivateMessage(ddnetUserId, `特别关注的在线用户: ${friendname}`);
   
-              await ctx.bots[0].sendPrivateMessage(data.user_id, `特别关注的在线用户: ${friendname}`);
-  
-              sentUsers.add(data.user_id); // 将用户 ID 添加到已发送集合中
-              
-              // 更新数据库中的最后发送时间
-              await ctx.database.set('ddnet_group_data', { user_id: data.user_id }, { last_sent_time: now.toString() });
-              
-              break; // 跳出内部循环，因为我们已经为这个用户发送了消息
+            sentCombinations.add(`${ddnetUserId}-${friendname}`);
+            
+            // 更新或创建数据库记录
+            if (existingRecord) {
+              // 更新现有记录
+              await ctx.database.set('ddnet_group_data', { user_id: ddnetUserId, friendname: friendname }, { 
+                last_sent_time: now.toString()
+              });
+            } else {
+              // 创建新记录
+              await ctx.database.create('ddnet_group_data', {
+                user_id: ddnetUserId,
+                friendname: friendname,
+                last_sent_time: now.toString()
+              });
             }
           } catch (sendError) {
             ctx.logger(sendError);
@@ -965,8 +980,8 @@ if (ctx.config.Special_Attention ===true){
       }
   
       // 清理数据库中超过指定时间的记录
-      const cleanupTime = now - ctx.config.Special_Attention_Interval_time * 1 * 60 * 1000;
-      await ctx.database.set('ddnet_group_data', { last_sent_time: { $lt: cleanupTime.toString() } }, { last_sent_time: null });
+      const cleanupTime = now - ctx.config.Special_Attention_Interval_time * 60 * 60 * 1000;
+      await ctx.database.remove('ddnet_group_data', { last_sent_time: { $lt: cleanupTime.toString() } });
   
     } catch (error) {
       ctx.logger('发生错误：'+ error);
@@ -979,7 +994,6 @@ if (ctx.config.Special_Attention ===true){
 
 
   // write your plugin here
-
 
 
   

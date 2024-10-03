@@ -27,5 +27,6 @@ export interface ddnet_group_data {
     guild_id: string;
     user_id: string;
     last_sent_time: string;
+    friendname: string;
 }
 export declare function apply(ctx: Context, Config: any, session: any): Promise<void>;
