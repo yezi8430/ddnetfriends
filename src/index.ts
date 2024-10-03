@@ -420,6 +420,17 @@ async function deletefriend(ctx: Context, userid,friendname) {
 }
 
 
+//删除全部好友
+async function deleteallfriend(ctx, userid) {
+  try {
+    await ctx.database.remove("ddnetfriendsdata", { userid: userid });
+    return '已全部完成';
+  } catch (error) {
+    ctx.logger.error('删除好友失败: ' + error.message);
+    throw new Error('删除好友失败');
+  }
+}
+
 //编辑网页内容
 async function getimage(nickname1,warband,emoji,colorbodyconfig){
 
@@ -795,6 +806,7 @@ function checkAndPrintFriendsnew(newclientInfoArray, backlist) {
 
 
 export async function apply(ctx: Context,Config,session) {
+  
   //获取配置信息
 const config =ctx.config;
 
@@ -1057,52 +1069,48 @@ ctx.setInterval(async () => {
 
 //--------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+
+
 ctx.command('dd在线').subcommand('dd删除好友')
- 
 .action(async ({session}) => {
   const userid = session.userId;  // 定义用户 ID
   
-  session.send('输入好友列表，如 123,234,abc,支持单个或批量');
-  
-  if (session.content !== '') {
-      
-    const dispose = ctx.on('message', async (session)=> {
+  try {
+    session.send('输入好友列表，如 123,234,abc,支持单个或批量');
+    const content = await session.prompt(15000);
     
-      const str = session.content;  // 定义需要转换的字符串
-
-      // 使用 split 方法将字符串分割成数组
-      const friendNames = str.split(',');
-
-      // 使用 map 方法生成对象数组
-      const arrfriends = friendNames.map(friendName => {
-      return { 'userid': userid, 'friendname': friendName };
-
-    });
-    //console.log(arrfriends);
-     const  deletesum =await deletefriend(ctx,userid,arrfriends);
-    if (deletesum !== 0) {  
-      session.send("已删除"+deletesum+"个好友");  
-      dispose()
-    } else {  
-      session.send("删除"+deletesum+"个好友，似乎没有找到匹配项");  
-      dispose()
+    if (!content) {
+      session.send('操作超时，已取消。');
+      return;
     }
 
-      //session.send(session.content+session.userId);
-    })
+    // 使用 split 方法将字符串分割成数组
+    const friendNames = content.split(',');
 
-   
-     
-    
+    // 使用 map 方法生成对象数组
+    const arrfriends = friendNames.map(friendName => {
+      return { 'userid': userid, 'friendname': friendName };
+    });
 
-  } else {
-    // 如果去掉这一行，那么不满足上述条件的消息就不会进入下一个中间件了
-    
+    const deletesum = await deletefriend(ctx, userid, arrfriends);
+    if (deletesum !== 0) {  
+      session.send("已删除" + deletesum + "个好友");  
+    } else {  
+      session.send("删除" + deletesum + "个好友，似乎没有找到匹配项");  
+    }
+  } catch (error) {
+    session.send('发生错误：' + error.message);
   }
 });
 
 
 //--------------------------------------------------------------------------------------------------------------------------------------------------------------
+ctx.command('dd在线').subcommand('dd删除全部好友')
+ 
+.action(async ({session}) => {
+  const userid = session.userId;
+  return await deleteallfriend(ctx, userid);
+})
 
 //--------------------------------------------------------------------------------------------------------------------------------------------------------------
 
