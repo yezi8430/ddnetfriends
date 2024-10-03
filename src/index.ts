@@ -969,9 +969,9 @@ if (ctx.config.Special_Attention ===true){
       await ctx.database.set('ddnet_group_data', { last_sent_time: { $lt: cleanupTime.toString() } }, { last_sent_time: null });
   
     } catch (error) {
-      console.log('发生错误：', error);
-      console.log('错误堆栈：', error.stack);
-      console.log('发生错误，请检查日志。');
+      ctx.logger('发生错误：'+ error);
+      ctx.logger('错误堆栈：'+ error.stack);
+      ctx.logger('发生错误，请检查日志。');
     }
   }, ctx.config.Special_Attention_listening * 60 * 1000);
 
