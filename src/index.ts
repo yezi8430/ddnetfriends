@@ -213,30 +213,24 @@ async function ddlist(ctx) {
     'https://master5.ddnet.org/ddnet/15/servers.json'
   ];
 
+  const timeout = 5000; // 5 seconds timeout
+
+  const fetchWithTimeout = (url) => {
+    return ctx.http.get(url, { 
+      responseType: 'json',
+      timeout: timeout 
+    }).catch(error => {
+      ctx.logger(`请求 ${url} 失败: ${error.message}`);
+      return Promise.reject(error);
+    });
+  };
+
   try {
-    const fetchPromises = urls.map(url => 
-      ctx.http.get(url, { responseType: 'json' })
-        .catch(error => {
-          ctx.logger(`请求 ${url} 失败: ${error.message}`);
-          return null;
-        })
-    );
-
-    const responses = await Promise.all(fetchPromises);
-    const validResponses = responses.filter(response => response !== null);
-
-    if (validResponses.length === 0) {
-      ctx.logger.warn('所有请求都失败了，可能是服务器炸了？');
-      return null;
-    }
-
-    const htmldata = validResponses[0];
-
-    return htmldata;
-
+    const result = await Promise.any(urls.map(url => fetchWithTimeout(url)));
+    return result;
   } catch (error) {
-    ctx.logger.error('获取数据时发生错误:', error);
-    throw error;
+    ctx.logger.error('所有请求都失败了，可能是服务器炸了？', error);
+    return null;
   }
 }
 
@@ -462,7 +456,6 @@ async function getimage(nickname1,warband,emoji,colorbodyconfig){
       if (colorBody === 'null' || colorBody === undefined) {
         return null;
       }
-      console.log(colorBody)
       // 将颜色转换为16进制并补足为6位
       let hex = parseInt(colorBody).toString(16).padStart(6, '0');
   
@@ -644,7 +637,7 @@ async function getimage(nickname1,warband,emoji,colorbodyconfig){
 
 }
 
-console.log(newcolorbody)
+
 const colorBodyArray = nickname1.map(item => item.color_body);
 
   const htmlContent =`<!DOCTYPE html>
@@ -1088,95 +1081,77 @@ if (ctx.config.Special_Attention ===true){
 
 
   
+  const SCREENSHOT_WIDTH = 315;
+  const NETWORK_IDLE_TIMEOUT = 5000;
+  const SCREENSHOT_PADDING = 15;
+  
   ctx.command('dd在线', '输入‘帮助 dd在线’查看其他命令')
-  .action(async ({ session }) => {
-    if (Config?.useimage === true) {
-      let browser, context, page;
+    .action(async ({ session }) => {
       try {
-        
         const qqid = session.userId;
         const [htmldata, backlist] = await Promise.all([
           ddlist(ctx),
           getlist(ctx, qqid)
         ]);
+  
         if (backlist.length === 0) {
-          await sendMessage(session,'未找到相关数据,你似乎还没有导入好友列表');
+          await sendMessage(session, '未找到相关数据,你似乎还没有导入好友列表');
           return;
         }
-
-        
-        newclientInfoArray = updateserverinfo(htmldata);
-        allfriends = checkAndPrintFriendsnew(newclientInfoArray, backlist);
-        
-    
+  
+        const newclientInfoArray = updateserverinfo(htmldata);
+        const allfriends = checkAndPrintFriendsnew(newclientInfoArray, backlist);
+  
         if (allfriends.length === 0) {
-          await sendMessage(session,'无在线好友');
+          await sendMessage(session, '无在线好友');
           return;
         }
-    
-        // 使用图片处理好友列表
-        const warband = Config?.enablewarband === true;
-        const emoji = Config?.enableemoji === true;
-        const colorbodyconfig = Config?.colorbodyconfig === true;
-        const gethtml = await getimage(allfriends, warband, emoji, colorbodyconfig);
-    
-        browser = ctx.puppeteer.browser;
-        context = await browser.createBrowserContext();
-        page = await context.newPage();
-    
-        await page.setContent(gethtml);
-        await Promise.race([
-          page.waitForNetworkIdle({ idleTime: 500, timeout: 5000 }),
-          new Promise(resolve => setTimeout(resolve, 5000))
-        ]);
-    
-        const bodyHeight = await page.evaluate(() => document.body.scrollHeight);
-    
-        const clip = {
-          x: 0,
-          y: 0,
-          width: 315,
-          height: bodyHeight + 15
-        };
-    
-        const image = await page.screenshot({ clip });
-        await sendMessage(session,h.image(image, 'image/png'));
+  
+        if (Config?.useimage === true) {
+          await handleImageOutput(ctx, session, allfriends, ctx.puppeteer.browser, Config);
+        } else {
+          await handleTextOutput(session, allfriends);
+        }
       } catch (error) {
         ctx.logger.error('Error during operation:', error);
-        await sendMessage(session,'操作过程中发生错误，请稍后再试');
-        
-      } finally {
-        // 确保资源释放
-        if (page) {
-          await page.close().catch(e => ctx.logger.error('Failed to close page:', e));
-        }
-        if (context) {
-          await context.close().catch(e => ctx.logger.error('Failed to close context:', e));
-        }
+        await sendMessage(session, '操作过程中发生错误，请稍后再试');
       }
-    } else {
-      // 不使用图片输出方式
-      const htmldata = await ddlist(ctx);
-      let newclientInfoArray = updateserverinfo(htmldata);
-      const qqid = session.userId;
-      let backlist = await getlist(ctx, qqid);
-
-      if (backlist.length === 0) {
-        await sendMessage(session,'未找到相关数据,你似乎还没有导入好友列表');
-        return;
-      } else {
-        let allfriends = checkAndPrintFriendsnew(newclientInfoArray, backlist);
-        if (allfriends.length === 0) {
-          await sendMessage(session,'无在线好友');
-          return;
-        } else {
-          let resultString = allfriends.map(friend => `${friend.friendname}\n`).join('');
-          await sendMessage(session,h('at', { id: session.userId }) + '你的在线好友:\n' + resultString);
-          return;
-        }
-      }
+    });
+  
+  async function handleImageOutput(ctx, session, allfriends, browser, config) {
+    let context, page;
+    try {
+      const { enablewarband, enableemoji, colorbodyconfig } = config;
+      const gethtml = await getimage(allfriends, enablewarband, enableemoji, colorbodyconfig);
+  
+      context = await browser.createBrowserContext();
+      page = await context.newPage();
+  
+      await page.setContent(gethtml);
+      await Promise.race([
+        page.waitForNetworkIdle({ idleTime: 500, timeout: NETWORK_IDLE_TIMEOUT }),
+        new Promise(resolve => setTimeout(resolve, NETWORK_IDLE_TIMEOUT))
+      ]);
+  
+      const bodyHeight = await page.evaluate(() => document.body.scrollHeight);
+      const clip = { x: 0, y: 0, width: SCREENSHOT_WIDTH, height: bodyHeight + SCREENSHOT_PADDING };
+  
+      const image = await page.screenshot({ clip });
+      await sendMessage(session, h.image(image, 'image/png'));
+    } catch (error) {
+      ctx.logger.error('Error in handleImageOutput:', error);
+      await sendMessage(session, '生成图片时发生错误，请稍后再试');
+    } finally {
+      if (page) await page.close().catch(e => ctx.logger.error('Failed to close page:', e));
+      if (context) await context.close().catch(e => ctx.logger.error('Failed to close context:', e));
     }
-  });
+  }
+  
+  async function handleTextOutput(session, allfriends) {
+    const resultString = allfriends.map(friend => `${friend.friendname}\n`).join('');
+    await sendMessage(session, h('at', { id: session.userId }) + '你的在线好友:\n' + resultString);
+  }
+  
 
 
 
