@@ -7,6 +7,8 @@ import type { Page } from 'puppeteer-core'
 import { arrayBuffer } from 'stream/consumers';
 import path from 'path'
 import fs from 'fs';
+const fsPromises = fs.promises;
+
 const koishi = require("koishi");
 
 //const fontPath = path.resolve(__dirname, './font/seguiemj.TTF');
@@ -137,13 +139,12 @@ async function cancelSpecialAttention(ctx,userid, special_attention,session) {
 
 
 //未完成地图
-async function fetchPlayerData(playerId, select, session) {
+async function fetchPlayerData(ctx, playerId, select, session) {
   try {
-    const response = await fetch(`https://ddnet.org/players/?json2=${playerId}`);
-    const data = await response.json();
-
+    const data = await ctx.http.get(`https://ddnet.org/players/?json2=${playerId}`, { responseType: 'json' });
+    
     if (Object.keys(data).length === 0) {
-      await sendMessage(session,`未查询到玩家ID: ${playerId}`);
+      await sendMessage(session, `未查询到玩家ID: ${playerId}`);
       return;
     }
 
@@ -171,14 +172,13 @@ async function fetchPlayerData(playerId, select, session) {
           }
         });
         if (unfinishedMaps.length > 0) {
-          await sendMessage(session,`${playerId} 在古典系列中尚未完成的地图，共计${unfinishedMaps.length}张:\n${unfinishedMaps.join('\n')}`);
+          await sendMessage(session, `${playerId} 在古典系列中尚未完成的地图，共计${unfinishedMaps.length}张:\n${unfinishedMaps.join('\n')}`);
         } else {
-          await sendMessage(session,`${playerId} 已完成所有古典系列的地图。`);
+          await sendMessage(session, `${playerId} 已完成所有古典系列的地图。`);
         }
         return;
       default:
-        await sendMessage(session,'无效的选择，请选择1-9之间的数字。');
-        
+        await sendMessage(session, '无效的选择，请选择1-9之间的数字。');
         return;
     }
 
@@ -189,17 +189,16 @@ async function fetchPlayerData(playerId, select, session) {
         .map(map => `${map}(${maps[map].points} points)`);
 
       if (unfinishedMaps.length > 0) {
-
-        await sendMessage(session,(0, koishi.h)('message', { forward: true },`${playerId} 在${mapType}类型中尚未完成的地图，共计${unfinishedMaps.length}张:\n${unfinishedMaps.join('\n')}`));
+        await sendMessage(session, (0, koishi.h)('message', { forward: true }, `${playerId} 在${mapType}类型中尚未完成的地图，共计${unfinishedMaps.length}张:\n${unfinishedMaps.join('\n')}`));
       } else {
-        await sendMessage(session,`${playerId} 已完成所有${mapType}类型的地图。`);
+        await sendMessage(session, `${playerId} 已完成所有${mapType}类型的地图。`);
       }
     } else {
-      await sendMessage(session,`无法获取 ${playerId} 的${mapType}地图数据。`);
+      await sendMessage(session, `无法获取 ${playerId} 的${mapType}地图数据。`);
     }
   } catch (error) {
-    console.error('获取数据时出错:', error);
-    await sendMessage(session,`获取数据时出错: ${error.message}`);
+    ctx.logger.error('获取数据时出错:', error);
+    await sendMessage(session, `获取数据时出错: ${error.message}`);
   }
 }
 
@@ -216,30 +215,29 @@ async function ddlist(ctx) {
 
   try {
     const fetchPromises = urls.map(url => 
-      fetch(url)
-        .then(response => response.json())
-        .catch(() => null) // 静默处理错误，返回null
+      ctx.http.get(url, { responseType: 'json' })
+        .catch(error => {
+          ctx.logger(`请求 ${url} 失败: ${error.message}`);
+          return null;
+        })
     );
 
     const responses = await Promise.all(fetchPromises);
     const validResponses = responses.filter(response => response !== null);
 
     if (validResponses.length === 0) {
-      ctx.logger('所有请求都失败了,可能是服务器炸了？');
-      
+      ctx.logger.warn('所有请求都失败了，可能是服务器炸了？');
+      return null;
     }
 
     const htmldata = validResponses[0];
 
-
     return htmldata;
-    
 
   } catch (error) {
-    ctx.logger('获取数据时发生错误:', error);
+    ctx.logger.error('获取数据时发生错误:', error);
     throw error;
   }
-  
 }
 
 async function addplayer(ctx:Context,{session}){
@@ -326,61 +324,60 @@ async function getpoints(ctx: Context,{ session },target) {
     const newPlayerArray = playernamelist.map(player => player.playername);
     const formattedPlayerNames = newPlayerArray.map((name, index) => 
       `${index + 1}.${name}`
-  ).join('\n');
-    await sendMessage(session,'请输入要查询玩家的序号:\n'+formattedPlayerNames);
+    ).join('\n');
+    await sendMessage(session, '请输入要查询玩家的序号:\n' + formattedPlayerNames);
     const input = await session.prompt(20000);
-    if (input && input.length !== 0){
-
+    
+    if (input && input.length !== 0) {
       const inputNumber = parseInt(input);
       if (isNaN(inputNumber) || inputNumber < 1 || inputNumber > playernamelist.length) {
-        await sendMessage(session,'无效输入。请输入一个有效的序号。');
+        await sendMessage(session, '无效输入。请输入一个有效的序号。');
         return;
       }
-      const fetchPromises = await fetch(pointsurl+playernamelist[input-1].playername)
-      .then(response => response.json())
-      .catch(() => null); // 静默处理错误，返回null
-      if (fetchPromises && fetchPromises.player && fetchPromises.points) {
-        const playerName = fetchPromises.player;
-        const playerPoints = fetchPromises.points.points;
-        const playerRank = fetchPromises.points.rank;
-        await sendMessage(session,playerName+':'+playerPoints+'排名:'+playerRank);
-        return;
-      }else {
-        await sendMessage(session,'没有查到这个玩家,看一下是不是输错id了吧');
+    
+      try {
+        const fetchPromises = await ctx.http.get(pointsurl + playernamelist[input-1].playername, { responseType: 'json' });
+    
+        if (fetchPromises && fetchPromises.player && fetchPromises.points) {
+          const playerName = fetchPromises.player;
+          const playerPoints = fetchPromises.points.points;
+          const playerRank = fetchPromises.points.rank;
+          await sendMessage(session, `${playerName}: ${playerPoints} 排名: ${playerRank}`);
+        } else {
+          await sendMessage(session, '没有查到这个玩家，看一下是不是输错id了吧');
+        }
+      } catch (error) {
+        ctx.logger.error('获取玩家数据时出错:', error);
+        await sendMessage(session, '获取玩家数据时出错，请稍后再试。');
       }
-    }
-    else{
+    } else {
       return;
     }
 
 
   }
-  else{//返回玩家数量1情况
-
-
-    try{
+  else { // 返回玩家数量1情况
+    try {
+      const fetchPromises = await ctx.http.get(pointsurl + playernamelist[0].playername, { responseType: 'json' });
       
-      const fetchPromises = await fetch(pointsurl+playernamelist[0].playername)
-        .then(response => response.json())
-        .catch(() => null); // 静默处理错误，返回null
-        if (fetchPromises && fetchPromises.player && fetchPromises.points) {
-          const playerName = fetchPromises.player;
-          const playerPoints = fetchPromises.points.points;
-          const playerRank = fetchPromises.points.rank;
-          await sendMessage(session,playerName+':'+playerPoints+'排名:'+playerRank);
-          return;
-        }else {
-          await sendMessage(session,'没有查到这个玩家,看一下是不是输错id了吧');
-        }
-    }
-    catch{
-      ctx.logger('获取数据时发生错误');
+      if (fetchPromises && fetchPromises.player && fetchPromises.points) {
+        const playerName = fetchPromises.player;
+        const playerPoints = fetchPromises.points.points;
+        const playerRank = fetchPromises.points.rank;
+        await sendMessage(session, `${playerName}: ${playerPoints} 排名: ${playerRank}`);
+      } else {
+        await sendMessage(session, '没有查到这个玩家,看一下是不是输错id了吧');
+      }
+    } catch (error) {
+      ctx.logger.error('获取数据时发生错误:', error);
+      await sendMessage(session, '获取数据时发生错误,请稍后再试。');
     }
   }
  }catch(error){
   await sendMessage(session,'网络似乎开了会儿小差'+error);
   return;
  }
+
 }
 
 
@@ -465,14 +462,14 @@ async function getimage(nickname1,warband,emoji,colorbodyconfig){
       if (colorBody === 'null' || colorBody === undefined) {
         return null;
       }
-  
+      console.log(colorBody)
       // 将颜色转换为16进制并补足为6位
       let hex = parseInt(colorBody).toString(16).padStart(6, '0');
   
       // 分组并转换为10进制，然后乘以1.411
       let h = Math.round(parseInt(hex.slice(0, 2), 16) * 1.411);
-      let s = Math.round(parseInt(hex.slice(2, 4), 16) * 0.392);
-      let l = Math.round(parseInt(hex.slice(4, 6), 16) * 0.392);
+      let s = Math.round((parseInt(hex.slice(2, 4), 16) * 0.392)-1);
+      let l = Math.round((parseInt(hex.slice(4, 6), 16) * 0.392)-1);
   
       // 如果亮度小于107，则进行处理
       if (l < 107) {
@@ -536,7 +533,79 @@ async function getimage(nickname1,warband,emoji,colorbodyconfig){
   const canvasnew = canvas.join(', ');
   
   let div='';
-  const imageurl = nickname1.map(item => `'https://ddnet.org/skins/skin/community/${item.skin}.png'`);
+  //const imageurl = nickname1.map(item => `'https://ddnet.org/skins/skin/community/${item.skin}.png'`);
+  const skinDir = path.join(__dirname, '..', 'skin');
+
+  // 确保skin目录存在
+  try {
+    await fsPromises.access(skinDir, fs.constants.F_OK);
+  } catch (error) {
+    await fsPromises.mkdir(skinDir, { recursive: true });
+  }
+
+  // 从官网获取默认皮肤
+  const getDefaultSkin = async () => {
+    const defaultSkinUrl = 'https://ddnet.org/skins/skin/community/default.png';
+    const defaultImagePath = path.join(skinDir, 'default.png');
+    try {
+      const response = await fetch(defaultSkinUrl);
+      if (response.ok) {
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        await fsPromises.writeFile(defaultImagePath, buffer);
+        console.log('Default skin fetched from DDNet and cached.');
+        return buffer;
+      } else {
+        throw new Error('Failed to fetch default skin from DDNet');
+      }
+    } catch (error) {
+      console.error('Error fetching default skin:', error);
+      throw error;
+    }
+  };
+
+  const imageurl = await Promise.all(nickname1.map(async item => {
+    const skinName = item.skin;
+    const localSkinPath = path.join(skinDir, `${skinName}.png`);
+    const ddnetSkinUrl = `https://ddnet.org/skins/skin/community/${skinName}.png`;
+    
+    try {
+      // 检查本地skin目录是否存在对应图片
+      await fsPromises.access(localSkinPath, fs.constants.F_OK);
+      const imageBuffer = await fsPromises.readFile(localSkinPath);
+      const base64Image = imageBuffer.toString('base64');
+      return `'data:image/png;base64,${base64Image}'`;
+    } catch (error) {
+      // 本地不存在,尝试从官网获取并缓存
+      try {
+        const response = await fetch(ddnetSkinUrl);
+        if (response.ok) {
+          const arrayBuffer = await response.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+          await fsPromises.writeFile(localSkinPath, buffer);
+          const base64Image = buffer.toString('base64');
+          return `'data:image/png;base64,${base64Image}'`;
+        } else {
+          throw new Error('Skin not found on ddnet');
+        }
+      } catch (error) {
+        console.error(`Failed to fetch skin ${skinName}, using default.png`);
+        try {
+          const defaultImageBuffer = await fsPromises.readFile(path.join(skinDir, 'default.png'));
+          const base64Image = defaultImageBuffer.toString('base64');
+          return `'data:image/png;base64,${base64Image}'`;
+        } catch (defaultError) {
+          console.error('Default skin not found, fetching from DDNet.');
+          const defaultImageBuffer = await getDefaultSkin();
+          const base64Image = defaultImageBuffer.toString('base64');
+          return `'data:image/png;base64,${base64Image}'`;
+        }
+      }
+    }
+  }));
+
+//console.log(imageurl)
+  
   //console.log(imageurl)
   for (let key in nickname1) {
     if (nickname1.hasOwnProperty(key)) {
@@ -575,7 +644,7 @@ async function getimage(nickname1,warband,emoji,colorbodyconfig){
 
 }
 
-
+console.log(newcolorbody)
 const colorBodyArray = nickname1.map(item => item.color_body);
 
   const htmlContent =`<!DOCTYPE html>
@@ -719,9 +788,9 @@ function processImageColor(img, color, brightnessFactor = 0.6) {
         for (var i = 0; i < data.length; i += 4) {
             var avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
             // 使用原始亮度调整新颜色，并应用亮度因子
-            data[i] = Math.min(255, (rgb[0] * avg * brightnessFactor) / 128);
-            data[i + 1] = Math.min(255, (rgb[1] * avg * brightnessFactor) / 128);
-            data[i + 2] = Math.min(255, (rgb[2] * avg * brightnessFactor) / 128);
+            data[i] = Math.min(255, (rgb[0] * avg * brightnessFactor) / 150);
+            data[i + 1] = Math.min(255, (rgb[1] * avg * brightnessFactor) / 150);
+            data[i + 2] = Math.min(255, (rgb[2] * avg * brightnessFactor) / 150);
             // 保持原始的 alpha 值
         }
 
@@ -977,7 +1046,7 @@ if (ctx.config.Special_Attention ===true){
         // 如果这个组合还没有发送过消息
         if (!sentCombinations.has(`${ddnetUserId}-${friendname}`)) {
           try {
-            await ctx.bots[0].sendPrivateMessage(ddnetUserId, `特别关注的在线用户: ${friendname}`);
+            await ctx.bots[0].sendPrivateMessage(ddnetUserId, `你关注的好友 ${friendname} 偷偷上线了`);
   
             sentCombinations.add(`${ddnetUserId}-${friendname}`);
             
@@ -996,7 +1065,7 @@ if (ctx.config.Special_Attention ===true){
               });
             }
           } catch (sendError) {
-            ctx.logger(sendError);
+            ctx.logger.error(sendError);
           }
         }
       }
@@ -1006,9 +1075,9 @@ if (ctx.config.Special_Attention ===true){
       await ctx.database.remove('ddnet_group_data', { last_sent_time: { $lt: cleanupTime.toString() } });
   
     } catch (error) {
-      ctx.logger('发生错误：'+ error);
-      ctx.logger('错误堆栈：'+ error.stack);
-      ctx.logger('发生错误，请检查日志。');
+      ctx.logger.error('发生错误：'+ error);
+      ctx.logger.error('错误堆栈：'+ error.stack);
+      ctx.logger.error('发生错误，请检查日志。');
     }
   }, ctx.config.Special_Attention_listening * 60 * 1000);
 
@@ -1024,9 +1093,12 @@ if (ctx.config.Special_Attention ===true){
     if (Config?.useimage === true) {
       let browser, context, page;
       try {
-        const htmldata = await ddlist(ctx); // 获取全部列表
+        
         const qqid = session.userId;
-        let backlist = await getlist(ctx, qqid);
+        const [htmldata, backlist] = await Promise.all([
+          ddlist(ctx),
+          getlist(ctx, qqid)
+        ]);
         if (backlist.length === 0) {
           await sendMessage(session,'未找到相关数据,你似乎还没有导入好友列表');
           return;
@@ -1222,7 +1294,7 @@ ctx.command('dd在线').subcommand('地图情况 [...args:string]')
     await sendMessage(session,'请输入要查询的序列号\n1.简单图(Novice)\n2.中阶图(Moderate)\n3.高阶图(Brutal)\n4.疯狂图(Insane)\n5.传统图(Oldschool)\n6.古典图(DDmaX)\n7.分身图(Dummy)\n8.单人图(Solo)\n9.竞速图(Race)');
     const select = await session.prompt(10000);
     if (!select)return;
-    else fetchPlayerData(args,select,session);
+    else fetchPlayerData(ctx,args,select,session);
     }
     else
     {
