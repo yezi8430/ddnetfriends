@@ -213,7 +213,7 @@ async function ddlist(ctx) {
     'https://master5.ddnet.org/ddnet/15/servers.json'
   ];
 
-  const timeout = 5000; // 5 seconds timeout
+  const timeout = 10000; // 5 seconds timeout
 
   const fetchWithTimeout = (url) => {
     return ctx.http.get(url, { 
@@ -1208,24 +1208,41 @@ ctx.command('dd在线').subcommand('dd删除全部好友')
 
 
 
-  ctx.command('dd在线').subcommand('dd添加好友')
+ctx.command('dd在线').subcommand('dd添加好友')
   .action(async ({ session }) => {
-    await sendMessage(session,'请在游戏中点击皮肤目录,并返回上一级菜单,双击settings_ddnet.cfg,用笔记本或记事本打开,复制里面所有的内容粘贴过来\n输入:取消\n可以取消输入');
-    const content = await session.prompt();
+    await sendMessage(session,'请在游戏中点击皮肤目录,并返回上一级菜单,双击settings_ddnet.cfg,用笔记本或记事本打开,复制里面所有的内容粘贴过来(如果只添加单个好友请直接输入好友名)\n输入:取消\n可以取消输入');
+    let content = await session.prompt();
 
-    if (content === '取消' || content ===null) {
+    if (content === '取消' || content === null) {
       await sendMessage(session,'已取消输入');
       return;
     }
 
+    // 新增的处理逻辑
+    if (!content.includes('add_friend') && content.length <= 30) {
+      content = `add_friend "${content}" ""`;
+    }
+
     const userid = session.userId;
-    const str =await extractNames(content);
+    const str = await extractNames(content);
     const friendNames = str.split(',');
 
-    const arrfriends = friendNames.map(friendName => ({
+    // 修改这里，将 content 作为单独的数组
+    const arrfriends = [{ 
       userid: userid,
-      friendname: friendName
-    }));
+      friendname: content 
+    }];
+
+    // 如果内容包含 'add_friend'，则使用原来的处理逻辑
+    if (content.includes('add_friend')) {
+      arrfriends.pop(); // 移除之前添加的单独数组元素
+      friendNames.forEach(friendName => {
+        arrfriends.push({
+          userid: userid,
+          friendname: friendName
+        });
+      });
+    }
 
     await addlist(ctx, arrfriends);
     await sendMessage(session,'添加成功');
