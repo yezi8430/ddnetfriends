@@ -213,36 +213,62 @@ async function ddlist(ctx) {
     'https://master5.ddnet.org/ddnet/15/servers.json'
   ];
 
-  const timeout = 10000; // 5 seconds timeout
+  const timeout = 10000; // 10秒超时
+  const maxRetries = 3; // 最大重试次数
 
-  const fetchWithTimeout = (url) => {
-    return ctx.http.get(url, { 
-      responseType: 'json',
-      timeout: timeout 
-    }).catch(error => {
-      ctx.logger(`请求 ${url} 失败: ${error.message}`);
-      return Promise.reject(error);
+  const fetchWithRetry = async (url) => {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const result = await ctx.http.get(url, {
+          responseType: 'json',
+          timeout: timeout
+        });
+        return result; // 如果成功，立即返回结果
+      } catch (error) {
+        //ctx.logger.warn(`请求 ${url} 失败 (尝试 ${i + 1}/${maxRetries}): ${error.message}`);
+        if (i === maxRetries - 1) {
+          throw error; // 如果是最后一次尝试，抛出错误
+        }
+      }
+    }
+  };
+
+  const raceToSuccess = (promises) => {
+    return new Promise((resolve, reject) => {
+      let rejectionCount = 0;
+      promises.forEach(promise => {
+        promise.then(resolve).catch(error => {
+          rejectionCount++;
+          if (rejectionCount === promises.length) {
+            reject(new AggregateError('All promises were rejected'));
+          }
+        });
+      });
     });
   };
 
   try {
-    const result = await Promise.any(urls.map(url => fetchWithTimeout(url)));
+    const fetchPromises = urls.map(url => fetchWithRetry(url));
+    const result = await raceToSuccess(fetchPromises);
+    // 取消其他正在进行的请求
+    fetchPromises.forEach(p => p.catch(() => {}));
     return result;
   } catch (error) {
-    ctx.logger.error('所有请求都失败了，可能是服务器炸了？', error);
+    ctx.logger.error('所有请求都失败了，可能是服务器出问题了？', error);
     return null;
   }
 }
 
-async function addplayer(ctx:Context,{session}){
-
-  await sendMessage(session,'请输入要添加的玩家id');
+async function addplayer(ctx: Context, { session }) {
+  await sendMessage(session, '请输入要添加的玩家id');
   const input = await session.prompt(20000);
-  if (input && input.length !== 0)
-    await ctx.database.create("ddnetfriendsdata", { userid:session.userId,playername: input});
 
-  await sendMessage(session,'添加成功,玩家id:'+input);
-  return;
+  if (input && input.trim().length !== 0) {
+    await ctx.database.create("ddnetfriendsdata", { userid: session.userId, playername: input.trim() });
+    await sendMessage(session, '添加成功,玩家id: ' + input.trim());
+  } else {
+    await sendMessage(session, '添加失败: 未输入玩家id或输入超时');
+  }
 }
 
 
@@ -582,7 +608,7 @@ async function getimage(nickname1,warband,emoji,colorbodyconfig){
           throw new Error('Skin not found on ddnet');
         }
       } catch (error) {
-        console.error(`Failed to fetch skin ${skinName}, using default.png`);
+        //console.error(`Failed to fetch skin ${skinName}, using default.png`);
         try {
           const defaultImageBuffer = await fsPromises.readFile(path.join(skinDir, 'default.png'));
           const base64Image = defaultImageBuffer.toString('base64');
