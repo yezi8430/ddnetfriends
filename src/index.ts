@@ -442,8 +442,6 @@ var backlist
 async function getlist(ctx: Context, qqid) {  
 
   const backlist =await ctx.database.get('ddnetfriendsdata', {userid: [qqid],},['friendname','Special_Attention'])
-
-  //console.log(backlist);
   return backlist;
 }
 
@@ -476,66 +474,47 @@ async function getimage(nickname1,warband,emoji,colorbodyconfig){
   let newcolorbody;
   let colorbody;
   let special_attention_css=''
-  if (colorbodyconfig ==true){
-
+  if (colorbodyconfig === true) {
     const processColorBody = (colorBody) => {
-      if (colorBody === 'null' || colorBody === undefined) {
-        return null;
-      }
-      // 将颜色转换为16进制并补足为6位
-      let hex = parseInt(colorBody).toString(16).padStart(6, '0');
-  
-      // 分组并转换为10进制，然后乘以1.411
-      let h = Math.round(parseInt(hex.slice(0, 2), 16) * 1.411);
-      let s = Math.round((parseInt(hex.slice(2, 4), 16) * 0.392)-1);
-      let l = Math.round((parseInt(hex.slice(4, 6), 16) * 0.392)-1);
-  
-      // 如果亮度小于107，则进行处理
-      if (l < 107) {
-          l = Math.floor(l / 2) + 128;
-      }
-      l = l * 0.392;
-  
-  
-      // 将HSL转换为RGB
-      const hslToRgb = (h, s, l) => {
-          s /= 100;
-          l /= 100;
-          const a = s * Math.min(l, 1 - l);
-          const f = (n) => {
-              const k = (n + h / 30) % 12;
-              return l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
-          };
-          return [
-              Math.round(255 * f(0)),
-              Math.round(255 * f(8)),
-              Math.round(255 * f(4))
-          ];
-      };
-  
-      const [r, g, b] = hslToRgb(h, s, l);
-  
-      return { r, g, b };
-  };
-  
-  colorbody = nickname1.map(friend => {
-      const color = processColorBody(friend.color_body);
-      if (color === null) {
-          return 'null';
-      }
-      return `${color.r},${color.g},${color.b}`;
-  });
-  
+        if (colorBody === 'null' || colorBody === undefined) {
+            return null;
+        }
 
-  newcolorbody=JSON.stringify(colorbody);
-  }
-  else{
+        // 将颜色转换为16进制并补足为6位
+        let hex = parseInt(colorBody).toString(16).padStart(6, '0');
+
+        // 拆分 hex 字符串为 h、s 和 l，每两位进行转换
+        let h = parseInt(hex.substring(0, 2), 16); // 取前两位
+        let s = parseInt(hex.substring(2, 4), 16); // 取中间两位
+        let l = parseInt(hex.substring(4, 6), 16); // 取后两位
+
+        // 将 h 从 0-255 映射到 0-360
+        h = Math.round((h / 255) * 360);
+        // 将 s 从 0-255 映射到 0-100
+        s = Math.round((s / 255) * 100);
+        // 将 l 从 0-255 映射到 50-100
+        l = Math.round((l / 255) * (100 - 50) + 50);
+
+
+        // 返回 h, s, l
+        return { h, s, l };
+    };
+
+    colorbody = nickname1.map(friend => {
+        const color = processColorBody(friend.color_body);
+        if (color === null) {
+            return 'null';
+        }
+        return `${color.h},${color.s},${color.l}`; // 返回 h, s, l
+    });
+
+    newcolorbody = JSON.stringify(colorbody);
+} else {
     let groupCount = Object.keys(nickname1).length;
     newcolorbody = Array(groupCount).fill("null");
-    newcolorbody=JSON.stringify(newcolorbody);
-  }
+    newcolorbody = JSON.stringify(newcolorbody);
+}
   
- // console.log(newcolorbody)
 //获取颜色end
   let emojistring;
   if (emoji ==true){
@@ -799,22 +778,58 @@ function processImageColor(img, color, brightnessFactor = 0.6) {
     ctx.drawImage(img, 0, 0);
 
     // 如果颜色不是 'null'，进行处理
-    if (color !== 'null') {
-        var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        var data = imageData.data;
-        var rgb = color.split(',').map(Number);
+if (color !== 'null') {
+    var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    var data = imageData.data;
+    var hsl = color.split(',').map((value, index) => {
+        if (index === 0) {
+            return parseInt(value);
+        } else {
+            return parseFloat(value.replace('%', '')) / 100;
+        }
+    });
 
-        for (var i = 0; i < data.length; i += 4) {
-            var avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-            // 使用原始亮度调整新颜色，并应用亮度因子
-            data[i] = Math.min(255, (rgb[0] * avg * brightnessFactor) / 150);
-            data[i + 1] = Math.min(255, (rgb[1] * avg * brightnessFactor) / 150);
-            data[i + 2] = Math.min(255, (rgb[2] * avg * brightnessFactor) / 150);
-            // 保持原始的 alpha 值
+    function hslToRgb(h, s, l) {
+        var r, g, b;
+
+        if (s == 0) {
+            r = g = b = l; // achromatic
+        } else {
+            var hue2rgb = function hue2rgb(p, q, t) {
+                if (t < 0) t += 1;
+                if (t > 1) t -= 1;
+                if (t < 1/6) return p + (q - p) * 6 * t;
+                if (t < 1/2) return q;
+                if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+                return p;
+            }
+
+            var q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+            var p = 2 * l - q;
+            r = hue2rgb(p, q, h / 360 + 1/3);
+            g = hue2rgb(p, q, h / 360);
+            b = hue2rgb(p, q, h / 360 - 1/3);
         }
 
-        ctx.putImageData(imageData, 0, 0);
+        return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
     }
+
+    var rgb = hslToRgb(hsl[0], hsl[1], hsl[2]);
+
+    
+    var brightnessAdjustment = 0.85; // 调整这个值，0.8 表示降低 20% 的亮度
+
+    for (var i = 0; i < data.length; i += 4) {
+        var avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+        // 使用原始亮度调整新颜色，并应用亮度因子和额外的亮度调整
+        data[i] = Math.min(255, (rgb[0] * avg * brightnessFactor * brightnessAdjustment) / 150);
+        data[i + 1] = Math.min(255, (rgb[1] * avg * brightnessFactor * brightnessAdjustment) / 150);
+        data[i + 2] = Math.min(255, (rgb[2] * avg * brightnessFactor * brightnessAdjustment) / 150);
+        // 保持原始的 alpha 值
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+}
 
     return canvas;
 }
@@ -886,34 +901,35 @@ function updateserverinfo(htmldata)
 }
 
 function checkAndPrintFriendsnew(newclientInfoArray, backlist) {
-  // 创建一个 Map 来存储 backlist 中的 friendname 和 Special_Attention
+
   const backlistMap = new Map(backlist.map(item => [item.friendname, item.Special_Attention]));
 
-  // 过滤 newclientInfoArray，只保留在 backlist 中存在的非空 friendname
   const formattedIntersection = newclientInfoArray
     .map(item => {
       const parts = item.split(',');
-      const friendname = parts[0].split(':')[1];
+      // 修改这里：获取完整的 friendname，即第一个逗号之前的所有内容
+      const friendnamePart = parts.shift();
+      const friendname = friendnamePart.slice(friendnamePart.indexOf(':') + 1);
+      
       if (!friendname || !backlistMap.has(friendname)) {
         return null;
       }
       return {
         friendname,
-        skin: parts[1].split(':')[1],
-        servername: parts[2].split(':')[1],
-        mapname: parts[3].split(':')[1],
-        color_body: parts[4].split(':')[1],
-        color_feet: parts[5].split(':')[1],
-        warband: parts[6].split(':')[1],
-        afk: parts[7].split(':')[1],
-        Special_Attention: backlistMap.get(friendname) // 添加 Special_Attention 字段
+        skin: parts[0].split(':')[1],
+        servername: parts[1].split(':')[1],
+        mapname: parts[2].split(':')[1],
+        color_body: parts[3].split(':')[1],
+        color_feet: parts[4].split(':')[1],
+        warband: parts[5].split(':')[1],
+        afk: parts[6].split(':')[1],
+        Special_Attention: backlistMap.get(friendname)
       };
     })
-    .filter(Boolean); // 过滤掉 null 值
+    .filter(Boolean);
 
   return formattedIntersection;
 }
-
 
 export async function apply(ctx: Context,Config,session) {
   
@@ -1124,10 +1140,9 @@ if (ctx.config.Special_Attention ===true){
           await sendMessage(session, '未找到相关数据,你似乎还没有导入好友列表');
           return;
         }
-  
         const newclientInfoArray = updateserverinfo(htmldata);
         const allfriends = checkAndPrintFriendsnew(newclientInfoArray, backlist);
-  
+        
         if (allfriends.length === 0) {
           await sendMessage(session, '无在线好友');
           return;
