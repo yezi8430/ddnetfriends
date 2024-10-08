@@ -21,7 +21,6 @@ export const Config: Schema<Config> = Schema.object({
   useimage: Schema.boolean().description('是否使用图片样式').default(true),
   enablewarband: Schema.boolean().description('是否显示战队(返回的数据以官网为准,如果好友不是该战队,可能是别人恰分改的ID？)').default(true),
   enableemoji: Schema.boolean().description('是否开启emoji,改善有些id或战队使用emoji表情的显示情况,但是有可能会影响加载速度(maybe)').default(false),
-  colorbodyconfig:Schema.boolean().description('启用皮肤颜色,不过相比游戏内会显得更亮一点,自己看着要不要开关吧').default(false),
   Special_Attention:Schema.boolean().description('是否推送关注用户上线消息,发送失败的话可能要加机器人为好友(因为是私聊),如果关闭的话以下内容不会生效').default(false),
   Special_Attention_Interval_time:Schema.number().description('默认每个关注对象推送间隔为12小时(如果推送过一次之后则下次直到12小时后上线才推送').default(12),
   Special_Attention_listening:Schema.number().description('默认监听间隔,降低这个值可以减少查询的频率,默认监听间隔3分钟').default(3)
@@ -469,12 +468,12 @@ async function deleteallfriend(ctx, userid) {
 }
 
 //编辑网页内容
-async function getimage(nickname1,warband,emoji,colorbodyconfig){
+async function getimage(nickname1,warband,emoji){
 
   let newcolorbody;
   let colorbody;
   let special_attention_css=''
-  if (colorbodyconfig === true) {
+
     const processColorBody = (colorBody) => {
         if (colorBody === 'null' || colorBody === undefined) {
             return null;
@@ -509,11 +508,7 @@ async function getimage(nickname1,warband,emoji,colorbodyconfig){
     });
 
     newcolorbody = JSON.stringify(colorbody);
-} else {
-    let groupCount = Object.keys(nickname1).length;
-    newcolorbody = Array(groupCount).fill("null");
-    newcolorbody = JSON.stringify(newcolorbody);
-}
+
   
 //获取颜色end
   let emojistring;
@@ -817,7 +812,7 @@ if (color !== 'null') {
     var rgb = hslToRgb(hsl[0], hsl[1], hsl[2]);
 
     
-    var brightnessAdjustment = 0.85; // 调整这个值，0.8 表示降低 20% 的亮度
+    var brightnessAdjustment = 0.83; // 亮度调整
 
     for (var i = 0; i < data.length; i += 4) {
         var avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
@@ -1162,8 +1157,8 @@ if (ctx.config.Special_Attention ===true){
   async function handleImageOutput(ctx, session, allfriends, browser, config) {
     let context, page;
     try {
-      const { enablewarband, enableemoji, colorbodyconfig } = config;
-      const gethtml = await getimage(allfriends, enablewarband, enableemoji, colorbodyconfig);
+      const { enablewarband, enableemoji } = config;
+      const gethtml = await getimage(allfriends, enablewarband, enableemoji);
   
       context = await browser.createBrowserContext();
       page = await context.newPage();

@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-ddnetfriends",
   "description": "作用于ddnet好友列表在线情况查询,可前往github查看使用方法",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
