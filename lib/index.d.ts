@@ -24,7 +24,6 @@ export interface ddnetfriendsdata {
 }
 export interface ddnet_group_data {
     id: number;
-    guild_id: string;
     user_id: string;
     last_sent_time: string;
     friendname: string;

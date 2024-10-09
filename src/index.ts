@@ -50,7 +50,6 @@ export interface ddnetfriendsdata {
 
 export interface ddnet_group_data {
   id: number
-  guild_id: string
   user_id: string
   last_sent_time:string
   friendname:string
@@ -763,7 +762,7 @@ function loadImage(src, index) {
     }
 
     // 处理图像颜色的函数
-function processImageColor(img, color, brightnessFactor = 0.6) {
+function processImageColor(img, color, brightnessFactor = 0.7) {
     var canvas = document.createElement('canvas');
     var ctx = canvas.getContext('2d');
     canvas.width = img.width;
@@ -902,7 +901,6 @@ function checkAndPrintFriendsnew(newclientInfoArray, backlist) {
   const formattedIntersection = newclientInfoArray
     .map(item => {
       const parts = item.split(',');
-      // 修改这里：获取完整的 friendname，即第一个逗号之前的所有内容
       const friendnamePart = parts.shift();
       const friendname = friendnamePart.slice(friendnamePart.indexOf(':') + 1);
       
@@ -939,16 +937,13 @@ ctx.on('ready', async () => {
       for await (const guild of bot.getGuildIter()) {
         for await (const member of bot.getGuildMemberIter(guild.id)) {
           try {
-            
             await ctx.database.upsert('ddnet_group_data', [{
-              guild_id: guild.id,
-              user_id: member.user.id  // 使用 user 对象的 id 属性
-            }], ['guild_id', 'user_id'])
+              user_id: member.user.id  // 只使用 user 对象的 id 属性
+            }], ['user_id'])
           } catch (error) {
             console.error(`数据库操作失败: ${error.message}`)
           }
         }
-
       }
     }
     //console.log('群组数据初始化完成')
@@ -957,46 +952,39 @@ ctx.on('ready', async () => {
   }
 })
 
+// 监听成员加入事件
+ctx.on('guild-member-added', async (session) => {
+  await ctx.database.upsert('ddnet_group_data', [{
+    user_id: session.userId
+  }], ['user_id'])
+  console.log(`新成员加入：${session.username}`)
+})
 
-  // 监听成员加入事件
-  ctx.on('guild-member-added', async (session) => {
-    await ctx.database.upsert('ddnet_group_data', [{
-      guild_id: session.guildId,
-      user_id: session.userId
-    }], ['guild_id', 'user_id'])
-    console.log(`新成员加入：${session.username}`)
+// 监听成员退出事件
+ctx.on('guild-member-removed', async (session) => {
+  await ctx.database.remove('ddnet_group_data', {
+    user_id: session.userId
   })
+  console.log(`成员退出：${session.username}`)
+})
 
-  // 监听成员退出事件
-  ctx.on('guild-member-removed', async (session) => {
-    await ctx.database.remove('ddnet_group_data', {
-      guild_id: session.guildId,
-      user_id: session.userId
-    })
-    console.log(`成员退出：${session.username}`)
-  })
-
-
-  ctx.model.extend('ddnetfriendsdata', {
-    // 各字段的类型声明
-    id: 'unsigned',
-    userid:'string',
-    friendname: 'string',
-    playername:'string',
-    Special_Attention:'string'
-},
-{
+ctx.model.extend('ddnetfriendsdata', {
+  // 各字段的类型声明
+  id: 'unsigned',
+  userid: 'string',
+  friendname: 'string',
+  playername: 'string',
+  Special_Attention: 'string'
+}, {
   primary: 'id',
   autoInc: true,
-}
-)
+})
 
 ctx.model.extend('ddnet_group_data', {
   id: 'unsigned',
-  guild_id: 'string',
   user_id: 'string',
-  last_sent_time:'string',
-  friendname:'string'
+  last_sent_time: 'string',
+  friendname: 'string'
 }, {
   primary: 'id',
   autoInc: true,
@@ -1053,22 +1041,35 @@ if (ctx.config.Special_Attention ===true){
       // 创建一个 Set 来跟踪已经发送消息的用户 ID 和 friendname 组合
       const sentCombinations = new Set();
   
-      // 获取当前时间
-      const now = Date.now();
-  
+      // 获取当前本地时间
+      const now = new Date();
       // 处理 Special_Attention_online 中的每个项目
       for (const item of Special_Attention_online) {
-        const [friendnamePart, useridPart] = item.split(',');
-        const friendname = friendnamePart.split(':')[1];
-        const ddnetUserId = useridPart.split(':')[1];
+        const firstColonIndex = item.indexOf(':');
+        const lastCommaIndex = item.lastIndexOf(',');
         
+        // 提取完整的 friendname，包括可能存在的冒号
+        const friendname = item.slice(firstColonIndex + 1, lastCommaIndex);
+        const ddnetUserId = item.slice(lastCommaIndex + 1).split(':')[1];
+  
         // 检查该用户 ID 和 friendname 的组合是否存在
         const existingRecord = groupData.find(data => data.user_id === ddnetUserId && data.friendname === friendname);
-        
+  
         if (existingRecord) {
           // 如果记录存在，检查是否需要发送消息
-          const lastSentTime = existingRecord.last_sent_time ? parseInt(existingRecord.last_sent_time) : 0;
-          if (now - lastSentTime < ctx.config.Special_Attention_Interval_time * 60 * 60 * 1000) {
+          let lastSentTime;
+          if (existingRecord.last_sent_time) {
+            // 处理旧的时间格式
+            lastSentTime = new Date(existingRecord.last_sent_time);
+            if (isNaN(lastSentTime.getTime())) {
+              // 如果是无效日期，尝试解析为本地时间
+              lastSentTime = new Date(existingRecord.last_sent_time.replace(' ', 'T') + 'Z');
+            }
+          } else {
+            lastSentTime = new Date(0);
+          }
+  
+          if (now.getTime() - lastSentTime.getTime() < ctx.config.Special_Attention_Interval_time * 60 * 60 * 1000) {
             continue; // 如果在指定时间内发送过，跳过这个组合
           }
         }
@@ -1079,34 +1080,35 @@ if (ctx.config.Special_Attention ===true){
             await ctx.bots[0].sendPrivateMessage(ddnetUserId, `你关注的好友 ${friendname} 偷偷上线了`);
   
             sentCombinations.add(`${ddnetUserId}-${friendname}`);
-            
+  
             // 更新或创建数据库记录
+            const newLastSentTime = now.toISOString();
             if (existingRecord) {
               // 更新现有记录
-              await ctx.database.set('ddnet_group_data', { user_id: ddnetUserId, friendname: friendname }, { 
-                last_sent_time: now.toString()
+              await ctx.database.set('ddnet_group_data', { user_id: ddnetUserId, friendname: friendname }, {
+                last_sent_time: newLastSentTime
               });
             } else {
               // 创建新记录
               await ctx.database.create('ddnet_group_data', {
                 user_id: ddnetUserId,
                 friendname: friendname,
-                last_sent_time: now.toString()
+                last_sent_time: newLastSentTime
               });
             }
           } catch (sendError) {
-            ctx.logger.error(sendError);
+            ctx.logger.error('发送消息时发生错误：', sendError);
           }
         }
       }
   
       // 清理数据库中超过指定时间的记录
-      const cleanupTime = now - ctx.config.Special_Attention_Interval_time * 60 * 60 * 1000;
-      await ctx.database.remove('ddnet_group_data', { last_sent_time: { $lt: cleanupTime.toString() } });
+      const cleanupTime = new Date(now.getTime() - (ctx.config.Special_Attention_Interval_time * 60 * 60 * 1000));
+      await ctx.database.remove('ddnet_group_data', { last_sent_time: { $lt: cleanupTime.toISOString() } });
   
     } catch (error) {
-      ctx.logger.error('发生错误：'+ error);
-      ctx.logger.error('错误堆栈：'+ error.stack);
+      ctx.logger.error('发生错误：', error);
+      ctx.logger.error('错误堆栈：', error.stack);
       ctx.logger.error('发生错误，请检查日志。');
     }
   }, ctx.config.Special_Attention_listening * 60 * 1000);
@@ -1200,16 +1202,24 @@ ctx.command('dd在线').subcommand('dd删除好友')
   const userid = session.userId;  // 定义用户 ID
   
   try {
-    await sendMessage(session,'输入好友列表，如 123,234,abc,支持单个或批量');
+    await sendMessage(session, '输入好友列表，如 123,234,abc,支持单个或批量');
     const content = await session.prompt(15000);
     
     if (!content) {
-      await sendMessage(session,'操作超时，已取消。');
+      await sendMessage(session, '操作超时，已取消。');
       return;
     }
-
-    // 使用 split 方法将字符串分割成数组
-    const friendNames = content.split(',');
+    
+    // 将中文逗号替换为英文逗号，然后分割字符串
+    const friendNames = content.replace(/，/g, ',').split(',').map(name => name.trim());
+    
+    // 移除空字符串
+    const validFriendNames = friendNames.filter(name => name !== '');
+    
+    if (validFriendNames.length === 0) {
+      await sendMessage(session, '未输入有效的好友名称，操作已取消。');
+      return;
+    }
 
     // 使用 map 方法生成对象数组
     const arrfriends = friendNames.map(friendName => {

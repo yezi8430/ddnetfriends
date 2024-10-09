@@ -20,7 +20,13 @@ dd删除全部好友
 
 dd删除好友(格式:name1,name2,name3,.....)
 
+ps:孩子实在吃不起饭了,如果觉得用的还不错的话可以请作者喝杯奶茶吗,十分感谢你的赞助！
+
+![QR code.png](https://github.com/yezi8430/koishi-plugin-ddnetfriends/blob/master/QR%20code.png)
+
 更新日志
+
+v1.0.2:修复一些bug,优化部分代码逻辑
 
 v1.0.1:默认开启皮肤颜色
 
